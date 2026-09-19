@@ -151,7 +151,7 @@ namespace BundleMenu
         private static readonly float[] Speeds = { 0.5f, 0.75f, 1f, 1.5f, 2f };
         private static readonly float[] FailRates = { 0f, 0.25f, 0.5f, 1f };
         private static readonly float[] GuiSizes = { 0.85f, 1f, 1.15f };
-        private const int PrefsVersion = 2; // bump to drop saved values whose meaning changed
+        private const int PrefsVersion = 3; // bump to drop saved placement once (3: desktop players get the Desktop GUI)
         private const string Prefs = "BundleMenu.";
 
         // ================================================================== lifecycle

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "serial": 1,
+  "announcement": "Asset Bay content pack is live: 6 tablet styles, Sunset & Ocean themes, and props in Videos > Content pack.",
+  "screens": [],
+  "videos": [],
+  "tablet": {
+    "path": "bundles/content.bundle",
+    "sha256": "fec2c4cf5ef769e21abc9d42c83d9241fdd5e95879ae45982468bdd1a91782dd",
+    "prefab": ""
+  }
+}

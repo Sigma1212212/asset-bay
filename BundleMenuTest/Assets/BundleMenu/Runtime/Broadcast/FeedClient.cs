@@ -52,7 +52,7 @@ namespace BundleMenu
     /// </summary>
     public sealed class FeedClient
     {
-        public const string DefaultBaseUrl = "https://randomthingsthatarecool.dev/asset-bay/";
+        public const string DefaultBaseUrl = "https://assetbay.randomthingsthatarecool.dev/asset-bay/";
 
         // RSA public key for the feed (signing/feed-public-key.xml).
         private const string Modulus =

@@ -2,9 +2,10 @@ name = "asset-bay"
 main = "src/index.js"
 compatibility_date = "2026-09-01"
 
-# Only /asset-bay/* on your domain goes to this Worker; the rest of the site is untouched.
+# The Worker gets its own subdomain; Cloudflare creates the DNS record for it automatically.
+# URLs look like https://assetbay.randomthingsthatarecool.dev/asset-bay/feed
 routes = [
-  { pattern = "randomthingsthatarecool.dev/asset-bay/*", zone_name = "randomthingsthatarecool.dev" }
+  { pattern = "assetbay.randomthingsthatarecool.dev", custom_domain = true }
 ]
 
 # Videos, bundles and the signed feed live in this R2 bucket.

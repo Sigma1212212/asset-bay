@@ -3,7 +3,9 @@
 An in-game menu for listing, loading, unloading and spawning Unity **AssetBundles**. Features:
 - animated entrances you can switch at runtime
 - four original themes
-- four placements: right side of the screen, floating in front of you, on your wrist, or a click GUI window (desktop)
+- four placements: right side of the screen, floating in front of you, on your wrist, or the Desktop GUI
+- Desktop GUI: a dedicated window with a flat 2D menu and a live, tilted 3D preview of the real menu (both clickable)
+- a gun lib, and signed releases (see `signing/`)
 - a dummy mode, so you can test with no real bundles
 
 **Play it in Gorilla Tag:** download the launcher from [asset-bay-launcher releases](https://github.com/Sigma1212212/asset-bay-launcher/releases/latest). Start the game, run `AssetBayLauncher.exe`, click **Inject latest**, then press Tab in game.
@@ -14,7 +16,8 @@ An in-game menu for listing, loading, unloading and spawning Unity **AssetBundle
 | `BundleMenuTest/` | Unity 2022.3 test project: sample bundles, test scene, automated test director. |
 | `Injectable/` | Builds the same runtime code into `BundleMenu.dll` against Gorilla Tag's Unity 6000.2 assemblies. |
 | `Injector/` | Local copy of the [launcher](https://github.com/Sigma1212212/asset-bay-launcher) (its own MIT repo). Pulls the newest menu from this repo's releases, with a built-in copy as the offline fallback. |
-| `publish.ps1` | Builds `BundleMenu.dll` and publishes it as a GitHub release (with SHA-256). |
+| `publish.ps1` | Builds `BundleMenu.dll`, signs it, and publishes it as a GitHub release (DLL + SHA-256 + signature). |
+| `signing/`, `tools/sign/` | Release signing: public key, signing tool, and how to look after the private key. |
 | `LICENSE` | MIT. |
 | `LICENSING.md` | Licences of this repo, the launcher, and the third-party files the test project includes. |
 
@@ -48,7 +51,7 @@ There are three layers, and dependencies point one way only. The UI never touche
 | `UI/RowView.cs`, `UI/MenuView.cs` | Build and render the panel. |
 | `Menu/MenuPages.cs` | Library, Category, Bundle detail and Settings pages. Each one only returns rows. |
 | `Menu/BundleMenuController.cs` | The one component you add. Wires everything together. |
-| `Menu/ClickGui.cs` | Desktop "click GUI": the real world-space panel is parked off-map on its own layer, a hidden camera renders it into a draggable on-screen window, and clicks are mapped back onto it. |
+| `Menu/ClickGui.cs` | Desktop GUI window: top bar (drag, 2D / 3D / Both, close), a flat 2D menu pane, and a 3D preview pane. The preview is the real world-space panel parked off-map on its own layer, filmed by a hidden perspective camera (tilted, leans toward the mouse, renders only when something changes) and clickable through a camera ray. |
 | `Menu/DesktopPointer.cs` | All mouse input, read directly instead of through the EventSystem (works in games like Gorilla Tag whose EventSystem is VR-only). Hover, press, click, scroll-to-page, window dragging. |
 | `Gun/GunLib.cs`, `Gun/GunModes.cs` | Gun lib: aim (right mouse / right grip), laser + reticle, fire (left click / trigger), pluggable `IGunMode`s. Built-in modes: Place (spawn your last asset where you point), Delete (spawned objects only), Inspect, Measure. Local only. |
 | `Menu/Placement.cs` | `MenuPlacement`, `IRigProvider`, and `PokeInteractor` (VR fingertip presses without physics). |

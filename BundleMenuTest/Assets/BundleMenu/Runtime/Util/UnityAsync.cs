@@ -27,6 +27,13 @@ namespace BundleMenu
             }
         }
 
+        /// <summary>Destroys the hidden runner (pending awaits are cancelled). Called on eject.</summary>
+        public static void Shutdown()
+        {
+            if (runner != null) UnityEngine.Object.Destroy(runner.gameObject);
+            runner = null;
+        }
+
         /// <summary>Completes on the next frame's Update.</summary>
         public static Task NextFrame()
         {

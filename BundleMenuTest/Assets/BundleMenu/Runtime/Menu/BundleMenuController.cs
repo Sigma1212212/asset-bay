@@ -74,9 +74,11 @@ namespace BundleMenu
         public Transform gunHand;
 
         [Tooltip("Click GUI window size relative to the panel's design size.")]
-        [Range(0.6f, 1.6f)] public float guiScale = 1.1f;
+        [Range(0.6f, 1.6f)] public float guiScale = 1f;
         [Tooltip("Click GUI window centre, 0..1 of the screen. Remembered when you drag it.")]
         public Vector2 guiPosition = new Vector2(0.5f, 0.5f);
+        [Tooltip("Desktop GUI panes: the flat 2D menu, the live 3D preview, or both side by side.")]
+        public GuiView guiView = GuiView.Both;
 
         [Header("Content")]
         public BundleSourceMode sourceMode = BundleSourceMode.Dummy;
@@ -127,6 +129,8 @@ namespace BundleMenu
         private bool savedVisible, cursorSaved;
         private DummyBundleSource dummySource;
         private ClickGui gui;
+        private MenuView flatView;          // the 2D pane of the desktop GUI
+        private MenuAnimator flatAnimator;  // its own entrance timeline
         private DesktopPointer pointer;
         private readonly List<MenuButton> buttonCache = new List<MenuButton>();
         private readonly List<MenuButton> overlayScratch = new List<MenuButton>();
@@ -134,7 +138,7 @@ namespace BundleMenu
 
         private static readonly float[] Speeds = { 0.5f, 0.75f, 1f, 1.5f, 2f };
         private static readonly float[] FailRates = { 0f, 0.25f, 0.5f, 1f };
-        private static readonly float[] GuiSizes = { 0.8f, 1.1f, 1.4f };
+        private static readonly float[] GuiSizes = { 0.85f, 1f, 1.15f };
         private const int PrefsVersion = 2; // bump to drop saved values whose meaning changed
         private const string Prefs = "BundleMenu.";
 
@@ -164,6 +168,19 @@ namespace BundleMenu
             poker.Root = host;
 
             gui = new ClickGui(screenCanvas);
+            gui.ViewChanged += v =>
+            {
+                guiView = v;
+                SavePrefs();
+                if (!IsOpen || placement != MenuPlacement.ClickGui) return;
+                ApplyPlacement();
+                Render(animate: true);
+            };
+            gui.CloseRequested += Close;
+            var flatHost = UIFactory.Rect("BundleMenu Flat", gui.FlatSlot).Stretch();
+            flatView = flatHost.gameObject.AddComponent<MenuView>();
+            flatAnimator = gameObject.AddComponent<MenuAnimator>();
+
             pointer = gameObject.AddComponent<DesktopPointer>();
             pointer.OverlayButtons = OverlayButtons;
             pointer.WorldButtons = WorldButtons;
@@ -227,9 +244,10 @@ namespace BundleMenu
             if ((MenuInput.KeyDown(KeyCode.DownArrow) || MenuInput.KeyDown(KeyCode.UpArrow)) && EventSystem.current != null)
             {
                 var sel = EventSystem.current.currentSelectedGameObject;
-                if (sel == null || !sel.transform.IsChildOf(host))
+                var navView = FlatActive ? flatView : view;
+                if (sel == null || !sel.transform.IsChildOf(navView.transform))
                 {
-                    var first = view.FirstRowButton();
+                    var first = navView.FirstRowButton();
                     if (first != null) first.Select();
                 }
             }
@@ -241,12 +259,21 @@ namespace BundleMenu
 
             if (Gun != null && Gun.Aiming && host.gameObject.activeSelf) dirty = true; // live target readout
 
+            bool rendered = false;
             if (dirty && host.gameObject.activeSelf)
             {
                 dirty = false;
                 Render(animate: false);
+                rendered = true;
             }
+
+            if (gui.Visible)
+                gui.Tick(MenuInput.MousePosition,
+                    activity: rendered || Animator.IsPanelAnimating || Animator.IsPlayingItems || pointer.OverMenu);
         }
+
+        /// <summary>True while the desktop GUI's 2D pane is on screen.</summary>
+        private bool FlatActive => placement == MenuPlacement.ClickGui && gui.Visible && gui.View != GuiView.Preview;
 
         // ================================================================== open / close
 
@@ -293,11 +320,19 @@ namespace BundleMenu
                 view.Panel.localScale = Vector3.one;
                 view.PanelGroup.alpha = 1f;
                 view.PanelGroup.interactable = opening && p > 0.5f;
-                float gs = Mathf.Lerp(0.9f, 1f, opening ? Ease.OutBack(p, 1.6f) : e);
+                float gs = Mathf.Lerp(0.9f, 1f, opening ? Ease.OutBack(p, 1.6f) : e) * gui.BaseScale;
                 gui.Window.localScale = new Vector3(gs, gs, 1f);
                 gui.Group.alpha = Mathf.Clamp01(e * 1.4f);
-                if (view.AccentLine != null)
-                    view.AccentLine.localScale = new Vector3(Ease.InOutCubic(Mathf.Clamp01(p * 1.3f - 0.3f)), 1f, 1f);
+                gui.Group.blocksRaycasts = opening;
+                var line = new Vector3(Ease.InOutCubic(Mathf.Clamp01(p * 1.3f - 0.3f)), 1f, 1f);
+                if (view.AccentLine != null) view.AccentLine.localScale = line;
+                if (flatView != null && flatView.Panel != null)
+                {
+                    flatView.PanelGroup.alpha = 1f;
+                    flatView.PanelGroup.interactable = opening && p > 0.5f;
+                    if (flatView.AccentLine != null) flatView.AccentLine.localScale = line;
+                }
+                gui.RequestRender();
                 return;
             }
 
@@ -365,22 +400,29 @@ namespace BundleMenu
             page.PageIndex = Mathf.Clamp(page.PageIndex, 0, count - 1);
             var slice = all.Skip(page.PageIndex * rowsPerPage).Take(rowsPerPage).ToList();
 
-            view.SetTitle(page.Title);
-            view.SetBackVisible(pages.Count > 1);
-            view.SetPaging(page.PageIndex, count);
+            RenderInto(view, Animator, slice, page, count, animate, delay);
+            if (FlatActive) RenderInto(flatView, flatAnimator, slice, page, count, animate, delay);
+            gui?.RequestRender();
+        }
+
+        private void RenderInto(MenuView target, MenuAnimator anim, List<RowSpec> slice, MenuPage page, int count, bool animate, float delay)
+        {
+            target.SetTitle(page.Title);
+            target.SetBackVisible(pages.Count > 1);
+            target.SetPaging(page.PageIndex, count);
 
             if (animate)
             {
-                var items = view.ShowRows(slice);
-                Animator.PlayEntrance(items, EntranceLibrary.Get(entrance), stagger, delay);
+                var items = target.ShowRows(slice);
+                anim.PlayEntrance(items, EntranceLibrary.Get(entrance), stagger, delay);
             }
-            else if (view.Matches(slice))
+            else if (target.Matches(slice))
             {
-                view.UpdateRows(slice);
+                target.UpdateRows(slice);
             }
             else
             {
-                view.ShowRows(slice);
+                target.ShowRows(slice);
             }
         }
 
@@ -400,6 +442,7 @@ namespace BundleMenu
                       : kind == ToastKind.Success ? CurrentTheme.StatusOk
                       : CurrentTheme.Text;
             view.SetStatus(message, color);
+            if (flatView != null && flatView.Panel != null) flatView.SetStatus(message, color);
         }
 
         // ================================================================== bundle actions (called by pages)
@@ -502,6 +545,16 @@ namespace BundleMenu
                 int i = Array.FindIndex(GuiSizes, s => Mathf.Approximately(s, guiScale));
                 return i == 0 ? "Small" : i == 2 ? "Large" : i == 1 ? "Medium" : $"{guiScale:0.##}x";
             }
+        }
+
+        public string GuiViewName => guiView == GuiView.Both ? "2D + 3D" : guiView == GuiView.Flat ? "2D" : "3D";
+
+        public void CycleGuiView(int dir)
+        {
+            var next = CycleEnum(guiView, dir);
+            if (gui.Visible) gui.SetView(next); // raises ViewChanged → applies + saves
+            else { guiView = next; SavePrefs(); }
+            dirty = true;
         }
 
         public void CycleGuiSize(int dir)
@@ -647,16 +700,14 @@ namespace BundleMenu
             host.sizeDelta = new Vector2(MenuView.Width, view.Height);
             ((RectTransform)worldCanvas.transform).sizeDelta = new Vector2(MenuView.Width, view.Height);
 
-            view.BackButton.OnClick = Back;
-            view.CloseButton.OnClick = Close;
-            view.SettingsButton.OnClick = () =>
+            WireHeader(view);
+
+            if (flatView != null)
             {
-                if (pages.Peek() is SettingsPage) Back();
-                else Navigate(new SettingsPage());
-            };
-            view.SettingsButton.OnAltClick = Home;
-            view.PrevButton.OnClick = () => Page(-1);
-            view.NextButton.OnClick = () => Page(+1);
+                flatView.Build(CurrentTheme, rowsPerPage,
+                    $"{brand}  ·  v{(string.IsNullOrEmpty(versionLabel) ? Application.version : versionLabel)}");
+                WireHeader(flatView);
+            }
 
             BuildToggleButton();
             if (gui != null)
@@ -664,6 +715,20 @@ namespace BundleMenu
                 gui.ApplyTheme(CurrentTheme);
                 if (placement == MenuPlacement.ClickGui) ClickGui.SetLayerRecursively(worldCanvas.transform, gui.Layer);
             }
+        }
+
+        private void WireHeader(MenuView v)
+        {
+            v.BackButton.OnClick = Back;
+            v.CloseButton.OnClick = Close;
+            v.SettingsButton.OnClick = () =>
+            {
+                if (pages.Peek() is SettingsPage) Back();
+                else Navigate(new SettingsPage());
+            };
+            v.SettingsButton.OnAltClick = Home;
+            v.PrevButton.OnClick = () => Page(-1);
+            v.NextButton.OnClick = () => Page(+1);
         }
 
         private void BuildToggleButton()
@@ -706,7 +771,8 @@ namespace BundleMenu
                 worldCanvas.transform.SetPositionAndRotation(ClickGui.HiddenOrigin, Quaternion.identity);
                 worldCanvas.worldCamera = gui.Camera;
                 ClickGui.SetLayerRecursively(worldCanvas.transform, gui.Layer);
-                gui.Show(worldCanvas.transform, host.sizeDelta, guiScale, guiPosition, CurrentTheme);
+                gui.Show(worldCanvas.transform, host.sizeDelta, guiView, guiScale, guiPosition, CurrentTheme,
+                    $"{brand}  ·  desktop");
             }
             else
             {
@@ -775,6 +841,11 @@ namespace BundleMenu
             if (placement == MenuPlacement.ScreenRight && host.gameObject.activeSelf)
                 host.GetComponentsInChildren(false, overlayScratch);
             buttonCache.AddRange(overlayScratch);
+            if (placement == MenuPlacement.ClickGui && gui.Visible)
+            {
+                gui.Window.GetComponentsInChildren(false, overlayScratch);
+                buttonCache.AddRange(overlayScratch);
+            }
             return buttonCache;
         }
 
@@ -831,6 +902,8 @@ namespace BundleMenu
             if (PlayerPrefs.GetInt(Prefs + "version", 1) >= PrefsVersion)
                 placement = (MenuPlacement)PlayerPrefs.GetInt(Prefs + "placement", (int)placement);
             guiScale = PlayerPrefs.GetFloat(Prefs + "guiscale", guiScale);
+            guiView = (GuiView)PlayerPrefs.GetInt(Prefs + "guiview", (int)guiView);
+            if (!Enum.IsDefined(typeof(GuiView), guiView)) guiView = GuiView.Both;
             guiPosition = new Vector2(PlayerPrefs.GetFloat(Prefs + "guix", guiPosition.x), PlayerPrefs.GetFloat(Prefs + "guiy", guiPosition.y));
             theme = (ThemePreset)PlayerPrefs.GetInt(Prefs + "theme", (int)theme);
             sourceMode = (BundleSourceMode)PlayerPrefs.GetInt(Prefs + "source", (int)sourceMode);
@@ -855,6 +928,7 @@ namespace BundleMenu
             PlayerPrefs.SetFloat(Prefs + "failrate", dummyFailRate);
             PlayerPrefs.SetInt(Prefs + "unloadall", unloadDestroysSpawned ? 1 : 0);
             PlayerPrefs.SetFloat(Prefs + "guiscale", guiScale);
+            PlayerPrefs.SetInt(Prefs + "guiview", (int)guiView);
             PlayerPrefs.SetFloat(Prefs + "guix", guiPosition.x);
             PlayerPrefs.SetFloat(Prefs + "guiy", guiPosition.y);
             PlayerPrefs.SetInt(Prefs + "version", PrefsVersion);

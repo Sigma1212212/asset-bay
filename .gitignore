@@ -22,3 +22,7 @@ BundleMenuTest/shots/
 Injector/
 
 *.log
+
+# The PRIVATE signing key must never be committed (it lives in %APPDATA%\AssetBay\signing)
+release-key.pem
+*.key

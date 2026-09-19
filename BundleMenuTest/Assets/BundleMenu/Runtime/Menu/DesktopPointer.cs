@@ -26,8 +26,6 @@ namespace BundleMenu
         public Action<int> OnScroll;                           // +1 next page, -1 previous
         public Action<Vector2> OnWindowDragged;                // new normalized window position
 
-        /// <summary>Height (UI units) of the panel header you can drag the click GUI window by.</summary>
-        public float DragZone = 98f;
 
         private MenuButton hovered, pressed;
         private bool pressedRight, dragging;
@@ -76,7 +74,7 @@ namespace BundleMenu
                     pressedRight = rightDown && !leftDown;
                     hit.SimDown(pressedRight);
                 }
-                else if (leftDown && overGui && panelLocal.y > PanelHost().rect.yMax - DragZone)
+                else if (leftDown && overGui && Gui?.Invoke() is ClickGui g && g.InTopBar(mouse))
                 {
                     dragging = true;
                 }
@@ -117,13 +115,14 @@ namespace BundleMenu
             var host = PanelHost?.Invoke();
             if (host == null || !host.gameObject.activeInHierarchy) return null;
 
-            // 2. Click GUI window.
+            // 2. Desktop GUI window: its 2D pane and top bar are overlay buttons (handled above);
+            //    the 3D preview maps through the hidden camera onto the real panel.
             var gui = Gui?.Invoke();
             if (gui != null)
             {
-                if (!gui.Contains(mouse) || !gui.ScreenToWorld(mouse, host, out var world, out panelLocal)) return null;
+                if (!gui.Contains(mouse)) return null;
                 overGui = overSurface = true;
-                return WorldHit(world);
+                return gui.PreviewToWorld(mouse, host, out var world) ? WorldHit(world) : null;
             }
 
             // 3. World panel under a camera ray.

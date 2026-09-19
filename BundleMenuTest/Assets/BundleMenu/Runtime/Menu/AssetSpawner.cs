@@ -123,6 +123,13 @@ namespace BundleMenu
             foreach (var id in spawned.Keys.ToList()) ClearBundle(id);
         }
 
+        private void OnDestroy()
+        {
+            // Ejecting the menu removes everything it put in the world.
+            ClearAll();
+            if (container != null) Destroy(container.gameObject);
+        }
+
         private List<GameObject> ListFor(string id)
         {
             if (!spawned.TryGetValue(id, out var list)) spawned[id] = list = new List<GameObject>();

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using Object = UnityEngine.Object;
 
 namespace BundleMenu
 {
@@ -29,6 +30,18 @@ namespace BundleMenu
             Get($"glow{radius:0.#}_{soft:0.#}", () => BuildRounded(radius, 0f, soft));
 
         public static Sprite Glyph(Icon icon) => Get("icon" + icon, () => BuildIcon(icon));
+
+        /// <summary>Destroys every generated sprite and texture (called on eject; they're rebuilt on demand).</summary>
+        public static void ReleaseAll()
+        {
+            foreach (var s in Cache.Values)
+            {
+                if (s == null) continue;
+                if (s.texture != null) Object.Destroy(s.texture);
+                Object.Destroy(s);
+            }
+            Cache.Clear();
+        }
 
         private static Sprite Get(string key, Func<Sprite> build)
         {

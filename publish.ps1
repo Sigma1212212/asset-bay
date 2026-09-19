@@ -6,7 +6,8 @@
       .\publish.ps1 -Version 1.1.0 -Notes "New Cascade animation"
       .\publish.ps1 -Version 1.2.0-beta1 -Prerelease
 
-  Needs: dotnet SDK, GitHub CLI (`gh auth login` once), Gorilla Tag installed (the DLL compiles against it).
+  Needs: dotnet SDK, GitHub CLI (`gh auth login` once), Gorilla Tag installed (the DLL compiles against it),
+  and the release signing key (see signing\README.md). Launchers refuse DLLs without a valid signature.
   The repository defaults to the one in Injector\launcher.json.
 #>
 param(
@@ -48,8 +49,20 @@ $shaFile = "$dll.sha256"
 [IO.File]::WriteAllText($shaFile, "$hash  BundleMenu.dll`n")
 Write-Host "SHA-256 $hash" -ForegroundColor DarkGray
 
+# Sign with the private key from %APPDATA%\AssetBay\signing (never in the repo), then verify with the
+# public key the launcher ships with, so a broken signature can never be published.
+Write-Host "Signing..." -ForegroundColor Cyan
+$signer = Join-Path $root "tools\sign\AssetBaySign.csproj"
+& dotnet build $signer -c Release -nologo -v q | Out-Null
+$signDll = Join-Path $root "tools\sign\bin\Release\net8.0\AssetBaySign.dll"
+& dotnet $signDll sign $dll
+if ($LASTEXITCODE -ne 0) { throw "Signing failed - is the signing key on this PC? See signing\README.md." }
+& dotnet $signDll verify $dll (Join-Path $root "signing\release-public-key.pem")
+if ($LASTEXITCODE -ne 0) { throw "Signature did not verify against signing\release-public-key.pem." }
+$sigFile = "$dll.sig"
+
 if ($Notes -eq "") { $Notes = "BundleMenu $Version" }
-$releaseArgs = @("release", "create", $tag, $dll, $shaFile, "--repo", $Repo, "--title", "BundleMenu $Version", "--notes", $Notes)
+$releaseArgs = @("release", "create", $tag, $dll, $shaFile, $sigFile, "--repo", $Repo, "--title", "BundleMenu $Version", "--notes", $Notes)
 if ($Prerelease) { $releaseArgs += "--prerelease" }
 
 Write-Host "Creating release $tag on $Repo..." -ForegroundColor Cyan

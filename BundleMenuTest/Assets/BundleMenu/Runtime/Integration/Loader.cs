@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using UnityEngine;
 
 namespace BundleMenu
@@ -7,35 +8,64 @@ namespace BundleMenu
     /// Entry point for loading the menu from outside a Unity project: a Mono injector
     /// (namespace "BundleMenu", class "Loader", method "Inject") or a BepInEx plugin (call Loader.Inject()).
     ///
-    /// IMPORTANT: an injector calls Inject/Eject on ITS OWN thread, not Unity's main thread. Unity APIs
-    /// that touch the renderer (textures, canvases, materials) crash the game when used off the main
-    /// thread ("Graphics device is null"). So Inject only creates one empty GameObject with a tiny
-    /// bootstrap component; the real setup runs in that component's first Update, on the main thread.
-    /// Eject just raises a flag that the same component acts on.
+    /// An injector calls Inject/Eject on ITS OWN thread. Unity APIs are only safe on the main thread (using
+    /// them elsewhere is what crashed the game in 1.0.0), so Inject touches no Unity API at all: it only
+    /// subscribes to Canvas.willRenderCanvases - a plain managed event Unity raises on the main thread every
+    /// frame - and builds everything the first time that fires. If a game somehow never raises it, a
+    /// fallback after 5 seconds uses the old direct path.
     /// </summary>
     public static class Loader
     {
         private static GameObject bootstrap;
         private static volatile bool ejectRequested;
+        private static int started;               // 0 = idle, 1 = waiting for the main thread / running
+        private static Timer fallback;
 
         public static void Inject()
         {
-            try
-            {
-                if (bootstrap != null) return;
-                ejectRequested = false;
-                bootstrap = new GameObject("[BundleMenu]");
-                bootstrap.AddComponent<Bootstrap>(); // no Awake/OnEnable work: safe from any thread
-            }
-            catch (Exception e)
-            {
-                Debug.LogError("[BundleMenu] Inject failed: " + e);
-            }
+            if (Interlocked.CompareExchange(ref started, 1, 0) != 0) return; // already injected
+            ejectRequested = false;
+            Canvas.willRenderCanvases += OnMainThread;
+            fallback = new Timer(_ => FallbackStart(), null, 5000, Timeout.Infinite);
         }
 
         public static void Eject() => ejectRequested = true;
 
-        /// <summary>Runs on the main thread. Builds the menu on its first frame, tears it down on eject.</summary>
+        private static void OnMainThread()
+        {
+            Canvas.willRenderCanvases -= OnMainThread;
+            fallback?.Dispose();
+            fallback = null;
+            if (bootstrap != null) return;
+            try
+            {
+                bootstrap = new GameObject("[BundleMenu]");
+                bootstrap.AddComponent<Bootstrap>();
+            }
+            catch (Exception e)
+            {
+                Debug.LogError("[BundleMenu] Inject failed: " + e);
+                started = 0;
+            }
+        }
+
+        private static void FallbackStart()
+        {
+            // Only reached when no canvas rendered for 5 s (no UI at all in the game).
+            if (bootstrap != null) return;
+            Canvas.willRenderCanvases -= OnMainThread;
+            try
+            {
+                bootstrap = new GameObject("[BundleMenu]");
+                bootstrap.AddComponent<Bootstrap>(); // no Awake work: the real setup still happens in Update
+            }
+            catch
+            {
+                started = 0;
+            }
+        }
+
+        /// <summary>Runs on the main thread. Builds the menu on its first frame, tears it all down on eject.</summary>
         private sealed class Bootstrap : MonoBehaviour
         {
             private GameObject menuRoot;
@@ -45,11 +75,7 @@ namespace BundleMenu
             {
                 if (ejectRequested)
                 {
-                    if (menuRoot != null) Destroy(menuRoot);
-                    Destroy(gameObject);
-                    bootstrap = null;
-                    ejectRequested = false;
-                    Debug.Log("[BundleMenu] Ejected.");
+                    Destroy(gameObject); // OnDestroy does the cleanup
                     return;
                 }
 
@@ -82,7 +108,7 @@ namespace BundleMenu
                         menu.wristOffset = new Vector3(0f, 0.07f, 0.03f);
                     }
                     // VR headset: menu on the wrist, pressed with your finger.
-                    // Desktop / PC mode: the click GUI - a window in front of you, clicked with the mouse.
+                    // Desktop / PC mode: the desktop GUI window, clicked with the mouse.
                     menu.placement = MenuInput.VRActive ? MenuPlacement.Wrist : MenuPlacement.ClickGui;
 
                     menuRoot.SetActive(true);
@@ -99,8 +125,15 @@ namespace BundleMenu
 
             private void OnDestroy()
             {
-                if (menuRoot != null) Destroy(menuRoot);
+                // Everything the menu created goes with it: the controller (bundles, canvases, GUI camera,
+                // spawned objects, gun visuals), the async helper, and the generated sprites.
+                if (menuRoot != null) DestroyImmediate(menuRoot);
+                UnityAsync.Shutdown();
+                UISprites.ReleaseAll();
                 if (bootstrap == gameObject) bootstrap = null;
+                ejectRequested = false;
+                started = 0;
+                Debug.Log("[BundleMenu] Ejected and cleaned up.");
             }
         }
     }

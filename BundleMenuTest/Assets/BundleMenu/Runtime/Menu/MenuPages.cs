@@ -261,6 +261,9 @@ namespace BundleMenu
                 Cycle("placement", "Placement", PlacementName(ctx.Placement),
                     () => ctx.CyclePlacement(+1), () => ctx.CyclePlacement(-1)),
                 ctx.Placement == MenuPlacement.ClickGui
+                    ? Cycle("guiview", "GUI view", ctx.GuiViewName, () => ctx.CycleGuiView(+1), () => ctx.CycleGuiView(-1))
+                    : null,
+                ctx.Placement == MenuPlacement.ClickGui
                     ? Cycle("guisize", "GUI size", ctx.GuiSizeName, () => ctx.CycleGuiSize(+1), () => ctx.CycleGuiSize(-1))
                     : null,
                 Cycle("theme", "Theme", ctx.CurrentTheme.DisplayName,
@@ -285,7 +288,7 @@ namespace BundleMenu
 
         public static string PlacementName(MenuPlacement p) =>
             p == MenuPlacement.ScreenRight ? "Screen" : p == MenuPlacement.Floating ? "Floating"
-            : p == MenuPlacement.Wrist ? "Wrist" : "Click GUI";
+            : p == MenuPlacement.Wrist ? "Wrist" : "Desktop GUI";
 
         private static RowSpec Cycle(string key, string label, string value, Action next, Action prev) =>
             new RowSpec { Key = key, Label = label, Value = value, OnClick = next, OnAltClick = prev ?? next };

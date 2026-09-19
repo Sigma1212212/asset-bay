@@ -155,6 +155,7 @@ namespace BundleMenu
 
         private void Start()
         {
+            if (Service == null) { enabled = false; return; } // Awake failed; its error is already in the log
             Service.RefreshCatalogAsync().Forget();
             if (startOpen) Open();
         }

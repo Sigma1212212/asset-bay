@@ -124,14 +124,10 @@ namespace BundleMenu
             }
         }
 
-        /// <summary>Keeps the rig warm: the game creates its player a few seconds after launch.</summary>
-        public sealed class Binder : MonoBehaviour
+        /// <summary>Call every frame (main thread): the game creates its player a few seconds after launch.</summary>
+        public void Tick()
         {
-            public GorillaTagRig Rig;
-            private void Update()
-            {
-                if (Rig != null && (Rig.camera == null || Rig.leftHand == null)) Rig.Refresh();
-            }
+            if (camera == null || leftHand == null) Refresh();
         }
     }
 }

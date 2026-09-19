@@ -70,6 +70,7 @@ namespace BundleMenu
             var bg = UIFactory.Image(body, "Background", UISprites.RoundedFill(r), Color.white, raycast: true);
             bg.rectTransform.Stretch();
             bg.gameObject.AddComponent<UIGradient>().Set(T.PanelTop, T.PanelBottom);
+            if (raised && PanelAlpha > 0.5f) Bevel.Face(bg.transform, T, r, 0.4f); // the panel is a lit slab too
 
             if (pattern && T.Pattern != PanelPattern.None)
             {

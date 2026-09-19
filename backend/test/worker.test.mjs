@@ -75,7 +75,7 @@ try {
   check("presence: leaving removes you", (await r.json()).members.length === 0);
   r = await post({ room: "not-a-hash", player: h("1"), state: {} });
   check("presence: bad ids rejected", r.status === 400);
-  r = await post({ room: h("c"), player: h("4"), state: { junk: "x".repeat(600) } });
+  r = await post({ room: h("c"), player: h("4"), state: { junk: "x".repeat(1700) } });
   check("presence: oversized state rejected", r.status === 413);
   r = await get("/asset-bay/presence");
   check("presence: GET rejected", r.status === 405);

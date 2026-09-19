@@ -52,6 +52,8 @@ namespace BundleMenu
 
         public RectTransform Root;            // only buttons under here are considered
         public IRigProvider Rig;
+        /// <summary>More pokeable buttons outside Root (other players' shared menus).</summary>
+        public System.Func<IEnumerable<MenuButton>> ExtraButtons;
 
         private readonly List<MenuButton> buttons = new List<MenuButton>();
         private readonly Dictionary<Transform, TipState> tips = new Dictionary<Transform, TipState>();
@@ -65,13 +67,16 @@ namespace BundleMenu
         private void LateUpdate()
         {
             var tipList = Rig?.PokeTips;
-            if (Root == null || tipList == null || tipList.Count == 0 || !Root.gameObject.activeInHierarchy)
+            bool rootLive = Root != null && Root.gameObject.activeInHierarchy;
+            buttons.Clear();
+            if (rootLive) Root.GetComponentsInChildren(false, buttons);
+            var extra = ExtraButtons?.Invoke();
+            if (extra != null) buttons.AddRange(extra);
+            if (tipList == null || tipList.Count == 0 || buttons.Count == 0)
             {
                 ClearAll();
                 return;
             }
-
-            Root.GetComponentsInChildren(false, buttons);
 
             foreach (var tip in tipList)
             {

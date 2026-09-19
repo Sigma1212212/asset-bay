@@ -15,10 +15,10 @@ namespace BundleMenu
 
         public bool Visible { get; private set; }
 
-        private enum Tab { Menu, Sync, Online, Tools, Info }
-        private static readonly string[] TabNames = { "menu", "sync", "online", "tools", "info" };
+        private enum Tab { Menu, Sync, Online, Tablet, Tools, Info }
+        private static readonly string[] TabNames = { "menu", "sync", "online", "tablet", "tools", "info" };
         private Tab tab;
-        private Rect window = new Rect(80, 80, 640, 470);
+        private Rect window = new Rect(80, 80, 680, 520);
         private CursorLockMode savedLock;
         private bool savedVisible;
         private string linkCode = "", error;
@@ -79,6 +79,7 @@ namespace BundleMenu
                     case Tab.Menu: DrawMenuTab(); break;
                     case Tab.Sync: DrawSyncTab(); break;
                     case Tab.Online: DrawOnlineTab(); break;
+                    case Tab.Tablet: DrawTabletTab(); break;
                     case Tab.Tools: DrawToolsTab(); break;
                     default: DrawInfoTab(); break;
                 }

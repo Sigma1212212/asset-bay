@@ -35,6 +35,14 @@ namespace BundleMenu
             m.fill.rectTransform.Stretch();
             m.frame = UIFactory.Image(root, "Frame", UISprites.RoundedEdge(radius, look == RowLook.Box ? 2.5f : 2f), Color.white);
             m.frame.rectTransform.Stretch();
+            // Switch squares are chunky 3D keys; tick boxes get a softer lit face.
+            if (look == RowLook.Switch && t.Bevel > 0f)
+            {
+                var baseImg = Bevel.Base(root, t, radius, 4f);
+                baseImg.transform.SetAsFirstSibling();
+                root.Find("Shadow")?.SetAsFirstSibling();
+            }
+            Bevel.Face(m.fill.transform, t, radius, look == RowLook.Switch ? 1f : 0.6f);
             m.glyph = UIFactory.Image(root, "Glyph", UISprites.Glyph(Icon.Check), Color.white);
             m.glyph.rectTransform.Stretch(size * 0.14f, size * 0.14f, size * 0.14f, size * 0.14f);
             m.glyph.preserveAspect = true;

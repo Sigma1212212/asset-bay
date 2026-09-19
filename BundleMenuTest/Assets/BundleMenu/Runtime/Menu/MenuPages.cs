@@ -279,6 +279,11 @@ namespace BundleMenu
 
             rows.Add(new RowSpec
             {
+                Key = "test", Label = "Test the tablet", Value = "timer + beeps",
+                OnClick = () => SafeMenu.PlayTestVideo(ctx),
+            });
+            rows.Add(new RowSpec
+            {
                 Key = "pack", Label = "Content pack", Value = tablet.ContentBundle != null ? "loaded" : "not published",
                 ShowChevron = true, OnClick = () => ctx.Navigate(new ContentPage()),
             });
@@ -524,6 +529,14 @@ namespace BundleMenu
                 ctx.ToggleUnloadMode, ctx.ToggleUnloadMode));
             rows.Add(Cycle("screens", "Broadcast screens", ctx.BroadcastScreensOn ? "on" : "off",
                 ctx.ToggleBroadcastScreens, ctx.ToggleBroadcastScreens));
+            if (ctx.Presence != null)
+                rows.Add(new RowSpec
+                {
+                    Key = "control", Label = "Let others use my menu", Value = ctx.RemoteControlName,
+                    IsOn = ctx.RemoteControl != ControlLevel.Off, Light = ctx.RemoteControl == ControlLevel.Full ? StatusLight.Error
+                        : ctx.RemoteControl == ControlLevel.Browse ? StatusLight.Busy : StatusLight.None,
+                    OnClick = () => ctx.CycleRemoteControl(+1), OnAltClick = () => ctx.CycleRemoteControl(-1),
+                });
             if (ctx.Presence != null)
                 rows.Add(new RowSpec
                 {

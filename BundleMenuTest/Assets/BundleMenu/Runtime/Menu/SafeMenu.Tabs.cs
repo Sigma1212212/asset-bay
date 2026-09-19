@@ -86,6 +86,8 @@ namespace BundleMenu
             else
             {
                 if (Check("menu sharing", Menu.MenuSharing)) Menu.ToggleMenuSharing();
+                Cycle("others use it", Menu.RemoteControlName, Menu.CycleRemoteControl);
+                GUILayout.Label("browse = pages, videos, theme. full = everything, mods too. Always back to off when the game restarts.", sDimWrap);
                 Value("in this room", pr.Others.Count.ToString());
                 Value("connection", string.IsNullOrEmpty(pr.LastError) ? "ok" : pr.LastError);
                 foreach (var (player, state) in pr.Others)

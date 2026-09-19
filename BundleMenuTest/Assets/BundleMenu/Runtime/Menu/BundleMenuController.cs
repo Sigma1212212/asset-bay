@@ -264,6 +264,11 @@ namespace BundleMenu
                 Remote = gameObject.AddComponent<RemoteMenus>();
                 Remote.Presence = Presence;
                 Remote.ViewCamera = () => Rig.Camera;
+                Remote.Theme = () => CurrentTheme;
+                Remote.Report = message => Toast(message, ToastKind.Info);
+                SetupRemoteControl();
+                poker.ExtraButtons = () => Remote.Buttons;
+                pointer.RemoteButtons = () => Remote.Buttons;
             }
 
             SetupSync();
@@ -466,6 +471,7 @@ namespace BundleMenu
             int count = PageCount(all.Count);
             page.PageIndex = Mathf.Clamp(page.PageIndex, 0, count - 1);
             var slice = all.Skip(page.PageIndex * rowsPerPage).Take(rowsPerPage).ToList();
+            RememberSlice(slice, page, count);
 
             RenderInto(view, Animator, slice, page, count, animate, delay);
             if (FlatActive) RenderInto(flatView, flatAnimator, slice, page, count, animate, delay);
@@ -783,6 +789,9 @@ namespace BundleMenu
                 panel = "#" + ColorUtility.ToHtmlStringRGB(t.PanelTop),
                 page = IsOpen && pages.Count > 0 ? Clip(pages.Peek().Title, 40) : null,
                 video = Tablet != null && Tablet.IsPlaying ? Clip(Tablet.NowPlaying, 48) : null,
+                control = RemoteControl == ControlLevel.Full ? "full" : RemoteControl == ControlLevel.Browse ? "browse" : "off",
+                pg = lastPaging,
+                rows = MirrorRows(),
             };
         }
 

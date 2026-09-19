@@ -23,6 +23,7 @@ namespace BundleMenu
         public Func<RectTransform> PanelHost;
         public Func<Camera> WorldCamera;                       // for Floating / Wrist mouse rays
         public Func<bool> WorldMouseEnabled;
+        public Func<IEnumerable<MenuButton>> RemoteButtons;    // other players' shared menus floating in the world
         public Action<int> OnScroll;                           // +1 next page, -1 previous
         public Action<Vector2> OnWindowDragged;                // new normalized window position
 
@@ -112,6 +113,10 @@ namespace BundleMenu
             var overlayHit = Smallest(OverlayButtons?.Invoke(), b => RectTransformUtility.RectangleContainsScreenPoint((RectTransform)b.transform, mouse, null));
             if (overlayHit != null) { overSurface = true; return overlayHit; }
 
+            // Other players' shared menus: each button tested against its own plane.
+            var remoteHit = RemoteHit(mouse);
+            if (remoteHit != null) { overSurface = true; return remoteHit; }
+
             var host = PanelHost?.Invoke();
             if (host == null || !host.gameObject.activeInHierarchy) return null;
 
@@ -140,6 +145,22 @@ namespace BundleMenu
                 return WorldHit(world);
             }
             return null;
+        }
+
+        private MenuButton RemoteHit(Vector2 mouse)
+        {
+            var cam = WorldCamera?.Invoke();
+            var list = RemoteButtons?.Invoke();
+            if (cam == null || list == null) return null;
+            var ray = cam.ScreenPointToRay(mouse);
+            return Smallest(list, b =>
+            {
+                var rt = (RectTransform)b.transform;
+                var plane = new Plane(-rt.forward, rt.position);
+                if (!plane.Raycast(ray, out float d)) return false;
+                var local = rt.InverseTransformPoint(ray.GetPoint(d));
+                return rt.rect.Contains(new Vector2(local.x, local.y));
+            });
         }
 
         private MenuButton WorldHit(Vector3 world) =>

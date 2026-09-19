@@ -11,9 +11,9 @@ namespace BundleMenu
     public static class Bevel
     {
         /// <summary>Lighting layers on the button face. Put them under the label (sibling index 0).</summary>
-        public static void Face(Transform body, MenuTheme t, float radius)
+        public static void Face(Transform body, MenuTheme t, float radius, float strength = 1f)
         {
-            float k = t.Bevel;
+            float k = t.Bevel * strength;
             if (k <= 0f) return;
 
             var sheen = UIFactory.Image(body, "Sheen", UISprites.RoundedFill(radius), Color.white);

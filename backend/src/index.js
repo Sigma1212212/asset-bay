@@ -4,6 +4,7 @@
 //   GET /asset-bay/feed            -> {"feed": "<exact feed.json text>", "sig": "<base64 RSA signature>"}
 //   GET /asset-bay/media/<key>     -> a file from the R2 bucket (videos, bundles), with Range support
 //   POST /asset-bay/presence       -> menus in the same room find each other (hashed ids only, see presence.js)
+//   POST /asset-bay/control        -> press a button on another member's menu, only if they allowed it
 //   GET/PUT /asset-bay/settings    -> settings sync by anonymous sync-code hash (see settings.js)
 //   GET /asset-bay/budget          -> today's / this month's usage against the free-tier cut-offs (budget.js)
 //
@@ -15,7 +16,7 @@
 // Content is published from your PC with publish-feed.ps1 (wrangler writes to R2 directly), and the
 // menu only trusts a feed whose signature matches the public key built into it.
 
-import { handlePresence, PresenceRoom } from "./presence.js";
+import { handleControl, handlePresence, PresenceRoom } from "./presence.js";
 import { Budget, count, flush, isPaused, report } from "./budget.js";
 import { handleSettings, SettingsStore } from "./settings.js";
 export { PresenceRoom, Budget, SettingsStore };
@@ -49,6 +50,12 @@ async function route(request, env) {
     if (isPaused("presence")) return pausedResponse("daily Durable Object allowance");
     count("doCalls");
     return await handleSettings(request, env);
+  }
+
+  if (path === "/control") {
+    if (isPaused("presence")) return pausedResponse("daily Durable Object allowance");
+    count("doCalls");
+    return await handleControl(request, env);
   }
 
   if (path === "/presence") {

@@ -121,12 +121,37 @@ namespace BundleMenu
 
         // ================================================================== playback
 
+        // ---- for testing (safe-mode tablet tab): what the player is doing right now
+        public double PlayTime => player != null ? player.time : 0;
+        public double PlayLength => player != null && player.frameRate > 0 ? player.frameCount / player.frameRate : 0;
+        public bool IsPreparing => player != null && !player.isPrepared && !string.IsNullOrEmpty(player.url);
+        public string LastError { get; private set; }
+        public bool Loop { get; set; }
+        public Vector2Int VideoSize => player != null && player.texture != null ? new Vector2Int(player.texture.width, player.texture.height) : Vector2Int.zero;
+
+        public void Seek(double seconds)
+        {
+            if (player == null || !player.canSetTime) return;
+            player.time = Math.Max(0, Math.Min(seconds, Math.Max(0, PlayLength - 0.2)));
+        }
+
+        /// <summary>Play a web URL, or a video file on this PC (full path).</summary>
+        public void PlayAny(string urlOrPath, string title = null)
+        {
+            urlOrPath = (urlOrPath ?? "").Trim().Trim('"');
+            if (urlOrPath.Length == 0) return;
+            bool file = System.IO.File.Exists(urlOrPath);
+            string url = file ? new Uri(System.IO.Path.GetFullPath(urlOrPath)).AbsoluteUri : urlOrPath;
+            Play(url, title ?? (file ? System.IO.Path.GetFileName(urlOrPath) : urlOrPath));
+        }
+
         public void Play(string url, string title)
         {
             EnsurePlayer();
             NowPlaying = title;
+            LastError = null;
             player.url = url;
-            player.isLooping = false;
+            player.isLooping = Loop;
             player.prepareCompleted -= OnPrepared;
             player.prepareCompleted += OnPrepared;
             player.Prepare();
@@ -141,6 +166,7 @@ namespace BundleMenu
         }
 
         public void TogglePause() { if (player == null) return; if (player.isPlaying) player.Pause(); else player.Play(); }
+        public void SetLoop(bool on) { Loop = on; if (player != null) player.isLooping = on; }
         public void Restart() { if (player == null) return; player.time = 0; player.Play(); }
 
         public void SetVolume(float v)
@@ -294,7 +320,7 @@ namespace BundleMenu
             player.source = VideoSource.Url;
             player.audioOutputMode = VideoAudioOutputMode.AudioSource;
             player.SetTargetAudioSource(0, audioSource);
-            player.errorReceived += (vp, message) => Report?.Invoke("Video error: " + message);
+            player.errorReceived += (vp, message) => { LastError = message; Report?.Invoke("Video error: " + message); };
         }
 
         // ================================================================== per frame

@@ -1,9 +1,28 @@
 {
   "version": 1,
-  "serial": 1,
-  "announcement": "Asset Bay content pack is live: 6 tablet styles, Sunset & Ocean themes, and props in Videos > Content pack.",
+  "serial": 2,
+  "announcement": "Test videos are up: open Videos (or press H > tablet) to try the tablet.",
   "screens": [],
-  "videos": [],
+  "videos": [
+    {
+      "id": "tablet-test",
+      "title": "Tablet test (timer + beeps)",
+      "video": "videos/tablet-test.mp4",
+      "length": "0:30"
+    },
+    {
+      "id": "sync-check",
+      "title": "A/V sync check",
+      "video": "videos/sync-check.mp4",
+      "length": "0:20"
+    },
+    {
+      "id": "colour-bars",
+      "title": "Colour bars (loop test)",
+      "video": "videos/colour-bars.mp4",
+      "length": "0:15"
+    }
+  ],
   "tablet": {
     "path": "bundles/content.bundle",
     "sha256": "fec2c4cf5ef769e21abc9d42c83d9241fdd5e95879ae45982468bdd1a91782dd",

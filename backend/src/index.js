@@ -4,6 +4,7 @@
 //   GET /asset-bay/feed            -> {"feed": "<exact feed.json text>", "sig": "<base64 RSA signature>"}
 //   GET /asset-bay/media/<key>     -> a file from the R2 bucket (videos, bundles), with Range support
 //   POST /asset-bay/presence       -> menus in the same room find each other (hashed ids only, see presence.js)
+//   GET/PUT /asset-bay/settings    -> settings sync by anonymous sync-code hash (see settings.js)
 //   GET /asset-bay/budget          -> today's / this month's usage against the free-tier cut-offs (budget.js)
 //
 // Spending guard: every feature switches itself off before Cloudflare could bill for it, and comes back
@@ -16,7 +17,8 @@
 
 import { handlePresence, PresenceRoom } from "./presence.js";
 import { Budget, count, flush, isPaused, report } from "./budget.js";
-export { PresenceRoom, Budget };
+import { handleSettings, SettingsStore } from "./settings.js";
+export { PresenceRoom, Budget, SettingsStore };
 
 const PREFIX = "/asset-bay";
 const SAFE_KEY = /^[A-Za-z0-9][A-Za-z0-9._\-\/]{0,200}$/;
@@ -41,6 +43,13 @@ async function route(request, env) {
   // The usage report stays reachable while paused, so you can see why (80k cap leaves 20k of headroom).
   if (path === "/budget" && request.method === "GET") return json(await report(env), 200, { "Cache-Control": "no-store" });
   if (isPaused("all")) return pausedResponse("daily request allowance");
+
+  if (path === "/settings") {
+    // Same Durable Object allowance as presence.
+    if (isPaused("presence")) return pausedResponse("daily Durable Object allowance");
+    count("doCalls");
+    return await handleSettings(request, env);
+  }
 
   if (path === "/presence") {
     if (isPaused("presence")) return pausedResponse("daily Durable Object allowance");

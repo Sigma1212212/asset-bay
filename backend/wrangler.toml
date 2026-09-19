@@ -18,6 +18,11 @@ class_name = "PresenceRoom"
 name = "BUDGET"
 class_name = "Budget"
 
+# Settings sync (see src/settings.js). One instance per sync-code hash.
+[[durable_objects.bindings]]
+name = "SETTINGS"
+class_name = "SettingsStore"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["PresenceRoom"]
@@ -25,6 +30,10 @@ new_sqlite_classes = ["PresenceRoom"]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["Budget"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["SettingsStore"]
 
 # Videos, bundles and the signed feed live in this R2 bucket.
 [[r2_buckets]]

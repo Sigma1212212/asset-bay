@@ -530,6 +530,7 @@ namespace BundleMenu
                     Key = "sharing", Label = "Menu sharing", Value = ctx.MenuSharing ? "on" : "off", IsOn = ctx.MenuSharing,
                     OnClick = ctx.ToggleMenuSharing, OnAltClick = ctx.ToggleMenuSharing,
                 });
+            rows.Add(RowSpec.Info("safe", "Safe mode + sync code", $"press {ctx.Safe?.Key.ToString() ?? "H"}"));
             rows.Add(new RowSpec { Key = "rescan", Label = "Rescan bundles", OnClick = ctx.Rescan });
             rows.Add(new RowSpec { Key = "clear", Label = "Clear spawned", Value = ctx.Spawner.Count.ToString(), OnClick = ctx.ClearSpawned });
             rows.Add(new RowSpec { Key = "unloadall", Label = "Unload everything", OnClick = ctx.UnloadEverything });

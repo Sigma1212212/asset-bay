@@ -17,7 +17,7 @@ namespace BundleMenu
     /// so there is no prefab or hierarchy to set up by hand.
     /// </summary>
     [DisallowMultipleComponent]
-    public sealed class BundleMenuController : MonoBehaviour
+    public sealed partial class BundleMenuController : MonoBehaviour
     {
         [Header("General")]
         public string brand = "Asset Bay";
@@ -169,7 +169,8 @@ namespace BundleMenu
 
         private void Awake()
         {
-            if (rememberSettings) LoadPrefs();
+            CaptureDefaults();
+            if (rememberSettings) { LoadPrefs(); LoadSavedAt(); }
 
             Animator = gameObject.AddComponent<MenuAnimator>();
             Animator.Speed = animationSpeed;
@@ -264,6 +265,8 @@ namespace BundleMenu
                 Remote.Presence = Presence;
                 Remote.ViewCamera = () => Rig.Camera;
             }
+
+            SetupSync();
 
             CurrentTheme = ResolveTheme(theme);
             BuildView();
@@ -1119,6 +1122,7 @@ namespace BundleMenu
             PlayerPrefs.SetFloat(Prefs + "guix", guiPosition.x);
             PlayerPrefs.SetFloat(Prefs + "guiy", guiPosition.y);
             PlayerPrefs.SetInt(Prefs + "version", PrefsVersion);
+            AfterSave();
             PlayerPrefs.Save();
         }
     }

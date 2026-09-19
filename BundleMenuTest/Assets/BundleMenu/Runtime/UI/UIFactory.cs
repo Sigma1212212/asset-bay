@@ -119,6 +119,27 @@ namespace BundleMenu
             return button;
         }
 
+        /// <summary>Themed button with a text label ("Close", "< PREV", "Return"...).</summary>
+        public static MenuButton TextButton(Transform parent, string name, MenuTheme theme, string text, float size,
+                                            float radius, FontStyles style = FontStyles.Bold, float spacing = 1f)
+        {
+            var fill = Image(parent, name, UISprites.RoundedFill(radius), theme.ButtonFill, raycast: true);
+            var edge = Image(fill.transform, "Edge", UISprites.RoundedEdge(radius, theme.ButtonEdgeWidth), theme.ButtonEdge);
+            edge.rectTransform.Stretch();
+
+            var label = Text(fill.transform, "Label", theme, size, TextAlignmentOptions.Center, theme.Text, style, spacing);
+            label.rectTransform.Stretch(6f, 0f, 6f, 0f);
+            label.enableAutoSizing = true;
+            label.fontSizeMax = size;
+            label.fontSizeMin = Mathf.Min(10f, size);
+            label.text = text;
+
+            var button = fill.gameObject.AddComponent<MenuButton>();
+            button.PressScale = 0.92f;
+            button.Init(theme, fill, edge);
+            return button;
+        }
+
         public static Color WithAlpha(this Color c, float a) => new Color(c.r, c.g, c.b, a);
     }
 }

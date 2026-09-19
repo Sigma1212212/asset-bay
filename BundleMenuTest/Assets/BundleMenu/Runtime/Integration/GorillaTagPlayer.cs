@@ -26,7 +26,9 @@ namespace BundleMenu
         private readonly PropertyInfo playerInstance, rigidbodyProp, jumpMultProp, scaleProp;
         private readonly FieldInfo bodyColliderField, headColliderField, layersField, maxJumpField, networkInstance;
         private readonly Type rigType;
-        private readonly FieldInfo rigOffline, rigMine, rigBody, rigName;
+        private readonly FieldInfo rigOffline, rigMine, rigBody, rigName, rigOwner;
+        private readonly PropertyInfo localPlayer, roomName;
+        private PropertyInfo netUserId;
         private readonly PropertyInfo rigScale;
         private readonly MethodInfo setScale, teleport;
         private readonly PropertyInfo inRoom, isPrivate, gameMode;
@@ -51,6 +53,7 @@ namespace BundleMenu
                 rigBody = rigType.GetField("bodyTransform", Pub);
                 rigName = rigType.GetField("playerNameVisible", Pub);
                 rigScale = rigType.GetProperty("scaleFactor", Pub);
+                rigOwner = rigType.GetField("OwningNetPlayer", Pub);   // NetPlayer, has UserId
             }
             layersField = player.GetField("locomotionEnabledLayers", Pub);
             maxJumpField = player.GetField("maxJumpSpeed", Pub);
@@ -64,6 +67,8 @@ namespace BundleMenu
                 inRoom = network.GetProperty("InRoom", Pub);
                 isPrivate = network.GetProperty("SessionIsPrivate", Pub);
                 gameMode = network.GetProperty("GameModeString", Pub);
+                localPlayer = network.GetProperty("LocalPlayer", Pub);
+                roomName = network.GetProperty("RoomName", Pub);
             }
         }
 
@@ -98,6 +103,35 @@ namespace BundleMenu
             public Transform Body;
             public string Name;
             public float Scale;
+            public string UserId;   // used only to compute the hashed presence id, never sent raw
+        }
+
+        private string UserIdOf(object netPlayer)
+        {
+            if (netPlayer == null) return null;
+            if (netUserId == null) netUserId = netPlayer.GetType().GetProperty("UserId", Pub);
+            return Safe(() => netUserId?.GetValue(netPlayer) as string);
+        }
+
+        /// <summary>Your own player id, or null when not in a room.</summary>
+        public string LocalUserId
+        {
+            get
+            {
+                var net = Safe(() => networkInstance?.GetValue(null));
+                return net == null ? null : UserIdOf(Safe(() => localPlayer?.GetValue(net)));
+            }
+        }
+
+        /// <summary>Current room name, or null when not in a room.</summary>
+        public string RoomName
+        {
+            get
+            {
+                var net = Safe(() => networkInstance?.GetValue(null));
+                if (net == null || Safe(() => (bool?)inRoom?.GetValue(net)) != true) return null;
+                return Safe(() => roomName?.GetValue(net) as string);
+            }
         }
 
         /// <summary>Everyone in the room except you. Cheap enough to call a few times a second, not every frame.</summary>
@@ -121,6 +155,7 @@ namespace BundleMenu
                     Body = body,
                     Name = Safe(() => rigName?.GetValue(rig) as string) ?? "player",
                     Scale = Safe(() => rigScale?.GetValue(rig) as float?) ?? 1f,
+                    UserId = UserIdOf(Safe(() => rigOwner?.GetValue(rig))),
                 });
             }
             return result;

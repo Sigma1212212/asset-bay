@@ -114,17 +114,17 @@ namespace BundleMenu
             brand.text = brandText;
 
             bool flat = view != GuiView.Preview, preview = view != GuiView.Flat;
-            float contentW = (flat ? MenuView.Width : 0f) + (flat && preview ? Gap : 0f) + (preview ? PreviewWidth : 0f);
+            float contentW = (flat ? panel.x : 0f) + (flat && preview ? Gap : 0f) + (preview ? PreviewWidth : 0f);
             var size = new Vector2(Pad + contentW + Pad, TopBar + panel.y + Pad);
             Window.sizeDelta = size;
             BaseScale = scale;
             Window.localScale = Vector3.one * scale;
 
             FlatSlot.gameObject.SetActive(flat);
-            FlatSlot.Pin(new Vector2(0, 1), new Vector2(0, 1), new Vector2(Pad, -TopBar), new Vector2(MenuView.Width, panel.y));
+            FlatSlot.Pin(new Vector2(0, 1), new Vector2(0, 1), new Vector2(Pad, -TopBar), new Vector2(panel.x, panel.y));
             previewSlot.gameObject.SetActive(preview);
             previewSlot.Pin(new Vector2(0, 1), new Vector2(0, 1),
-                new Vector2(Pad + (flat ? MenuView.Width + Gap : 0f), -TopBar), new Vector2(PreviewWidth, panel.y));
+                new Vector2(Pad + (flat ? panel.x + Gap : 0f), -TopBar), new Vector2(PreviewWidth, panel.y));
 
             if (preview) SetupPreview();
             RefreshViewButtons();

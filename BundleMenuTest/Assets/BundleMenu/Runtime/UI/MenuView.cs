@@ -9,161 +9,66 @@ namespace BundleMenu
     /// Builds and owns the panel's GameObjects. Pure presentation: it renders RowSpecs, exposes
     /// its buttons, and knows nothing about bundles, pages or placement.
     ///
-    ///   Panel (CanvasGroup)
-    ///   ├ Glow, Background (gradient), Rim (gradient outline)
-    ///   ├ Header: Back · Brand · Title · Settings · Close
-    ///   ├ AccentLine
-    ///   ├ Rows (VerticalLayoutGroup) → RowView × RowsPerPage
-    ///   ├ Footer: Prev · PageLabel · Next
-    ///   └ Status
+    /// Where each piece goes depends on the <see cref="MenuStyle"/>: a <see cref="MenuLayout"/> builds
+    /// the Panel (bounds of everything, including outside tabs), the body shell, header, rows and
+    /// controls. Every style provides the same pieces, so the controller never cares which one is up.
     /// </summary>
     public sealed class MenuView : MonoBehaviour
     {
+        /// <summary>Design width of the Classic panel. Other styles report their own <see cref="PanelWidth"/>.</summary>
         public const float Width = 440f;
         public const float RowHeight = 56f;
         public const float RowSpacing = 8f;
-        private const float HeaderHeight = 98f;
-        private const float Pad = 20f;
 
-        public RectTransform Panel { get; private set; }
-        public CanvasGroup PanelGroup { get; private set; }
-        public RectTransform AccentLine { get; private set; }
-        public MenuButton BackButton { get; private set; }
-        public MenuButton SettingsButton { get; private set; }
-        public MenuButton CloseButton { get; private set; }
-        public MenuButton PrevButton { get; private set; }
-        public MenuButton NextButton { get; private set; }
-        public float Height { get; private set; }
+        public RectTransform Panel { get; internal set; }
+        public CanvasGroup PanelGroup { get; internal set; }
+        public RectTransform AccentLine { get; internal set; }
+        public MenuButton BackButton { get; internal set; }
+        public MenuButton SettingsButton { get; internal set; }
+        public MenuButton CloseButton { get; internal set; }
+        public MenuButton PrevButton { get; internal set; }
+        public MenuButton NextButton { get; internal set; }
+        /// <summary>Full size of everything this style draws, including tabs outside the main body.</summary>
+        public float Height { get; internal set; }
+        public float PanelWidth { get; internal set; } = Width;
         public MenuTheme Theme { get; private set; }
+        public MenuStyle Style { get; private set; }
 
-        private readonly List<RowView> rows = new List<RowView>();
-        private TextMeshProUGUI brand, title, pageLabel, status;
+        internal readonly List<RowView> rows = new List<RowView>();
+        internal TextMeshProUGUI brand, title, pageLabel, status;
         private float statusUntil;
+        private MenuLayout layout;
 
         public IReadOnlyList<RowView> Rows => rows;
 
-        /// <summary>(Re)build everything for a theme. Existing children are destroyed.</summary>
-        public void Build(MenuTheme theme, int rowsPerPage, string brandText)
+        public void Build(MenuTheme theme, int rowsPerPage, string brandText) =>
+            Build(theme, MenuStyle.Classic, rowsPerPage, brandText);
+
+        /// <summary>(Re)build everything for a theme and menu style. Existing children are destroyed.</summary>
+        public void Build(MenuTheme theme, MenuStyle style, int rowsPerPage, string brandText)
         {
             Theme = theme;
-            for (int i = transform.childCount - 1; i >= 0; i--) Destroy(transform.GetChild(i).gameObject);
+            Style = style;
+            for (int i = transform.childCount - 1; i >= 0; i--)
+            {
+                var child = transform.GetChild(i).gameObject;
+                child.SetActive(false); // Destroy is deferred; hide now so the rebuild never overlaps it
+                Destroy(child);
+            }
             rows.Clear();
+            AccentLine = null;
+            PanelWidth = Width;
 
-            bool grid = theme.Layout == ThemeLayout.Grid;
-            int lines = grid ? Mathf.CeilToInt(rowsPerPage / 2f) : rowsPerPage;
-            float rowsHeight = lines * theme.RowHeight + (lines - 1) * theme.RowSpacing;
-            float rowsTop = HeaderHeight + 18f;
-            float footerTop = rowsTop + rowsHeight + 14f;
-            float statusTop = footerTop + 52f + 8f;
-            Height = statusTop + 22f + 14f;
-
-            Panel = UIFactory.Rect("Panel", transform);
-            Panel.sizeDelta = new Vector2(Width, Height);
-            PanelGroup = Panel.gameObject.AddComponent<CanvasGroup>();
-
-            // --- shell
-            const float glowSoft = 36f;
-            if (theme.GlowStrength > 0f)
-            {
-                var glow = UIFactory.Image(Panel, "Glow", UISprites.RoundedGlow(theme.PanelRadius, glowSoft), Color.white);
-                glow.rectTransform.Stretch(-glowSoft, -glowSoft, -glowSoft, -glowSoft);
-                glow.gameObject.AddComponent<UIGradient>().Set(theme.EdgeTop.WithAlpha(theme.GlowStrength),
-                                                               theme.EdgeBottom.WithAlpha(theme.GlowStrength));
-            }
-
-            var bg = UIFactory.Image(Panel, "Background", UISprites.RoundedFill(theme.PanelRadius), Color.white, raycast: true);
-            bg.rectTransform.Stretch();
-            bg.gameObject.AddComponent<UIGradient>().Set(theme.PanelTop, theme.PanelBottom);
-
-            if (theme.EdgeWidth > 0f)
-            {
-                var rim = UIFactory.Image(Panel, "Rim", UISprites.RoundedEdge(theme.PanelRadius, theme.EdgeWidth), Color.white);
-                rim.rectTransform.Stretch();
-                rim.gameObject.AddComponent<UIGradient>().Set(theme.EdgeTop, theme.EdgeBottom);
-                if (theme.Flicker > 0f) rim.gameObject.AddComponent<NeonFlicker>().Strength = theme.Flicker;
-            }
-
-            // --- header
-            float iconSize = 40f, iconRadius = Mathf.Min(theme.ButtonRadius, 12f);
-            BackButton = UIFactory.IconButton(Panel, "Back", theme, Icon.Back, iconSize, iconRadius);
-            BackButton.GetComponent<RectTransform>().Pin(new Vector2(0, 1), new Vector2(0, 0.5f), new Vector2(Pad, -HeaderHeight * 0.5f - 4f), Vector2.one * iconSize);
-
-            CloseButton = UIFactory.IconButton(Panel, "Close", theme, Icon.Close, iconSize, iconRadius);
-            CloseButton.GetComponent<RectTransform>().Pin(new Vector2(1, 1), new Vector2(1, 0.5f), new Vector2(-Pad, -HeaderHeight * 0.5f - 4f), Vector2.one * iconSize);
-
-            SettingsButton = UIFactory.IconButton(Panel, "Settings", theme, Icon.Gear, iconSize, iconRadius);
-            SettingsButton.GetComponent<RectTransform>().Pin(new Vector2(1, 1), new Vector2(1, 0.5f), new Vector2(-Pad - iconSize - 8f, -HeaderHeight * 0.5f - 4f), Vector2.one * iconSize);
-
-            brand = UIFactory.Text(Panel, "Brand", theme, 13, TextAlignmentOptions.BottomLeft, theme.SubText,
-                FontStyles.UpperCase | FontStyles.Bold, 4f);
-            title = UIFactory.Text(Panel, "Title", theme, 31, TextAlignmentOptions.TopLeft, theme.Text,
-                theme.TitleStyle, theme.TitleSpacing);
-            title.enableAutoSizing = true;   // long bundle names shrink before they truncate
-            title.fontSizeMin = 18f;
-            title.fontSizeMax = 31f;
-            brand.text = brandText;
+            layout = MenuStyles.Layout(style);
+            var kit = new LayoutKit(this, theme);
+            layout.Build(kit, rowsPerPage, brandText);
+            kit.EnsureButtons();
             SetBackVisible(false);
-
-            AccentLine = UIFactory.Image(Panel, "AccentLine", UISprites.RoundedFill(1.5f), Color.white).rectTransform;
-            AccentLine.TopStrip(HeaderHeight, 3f, Pad, Pad);
-            AccentLine.gameObject.AddComponent<UIGradient>().Set(theme.Accent, theme.Accent2, horizontal: true);
-
-            // --- rows
-            var list = UIFactory.Rect("Rows", Panel).TopStrip(rowsTop, rowsHeight, Pad, Pad);
-            if (grid)
-            {
-                // Two columns of tiles.
-                var gridLayout = list.gameObject.AddComponent<GridLayoutGroup>();
-                gridLayout.cellSize = new Vector2((Width - Pad * 2f - theme.RowSpacing) / 2f, theme.RowHeight);
-                gridLayout.spacing = new Vector2(theme.RowSpacing, theme.RowSpacing);
-                gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-                gridLayout.constraintCount = 2;
-                gridLayout.childAlignment = TextAnchor.UpperCenter;
-            }
-            else
-            {
-                var layout = list.gameObject.AddComponent<VerticalLayoutGroup>();
-                layout.spacing = theme.RowSpacing;
-                layout.childAlignment = TextAnchor.UpperCenter;
-                layout.childControlHeight = true;
-                layout.childControlWidth = true;
-                layout.childForceExpandHeight = false;
-                layout.childForceExpandWidth = true;
-            }
-            for (int i = 0; i < rowsPerPage; i++) rows.Add(RowView.Create(list, theme, theme.RowHeight, i));
-
-            // --- footer
-            var footer = UIFactory.Rect("Footer", Panel).TopStrip(footerTop, 52f, Pad, Pad);
-            float navW = 92f;
-            PrevButton = UIFactory.IconButton(footer, "Prev", theme, Icon.ChevronLeft, 52f, theme.ButtonRadius);
-            PrevButton.GetComponent<RectTransform>().Pin(new Vector2(0, 0.5f), new Vector2(0, 0.5f), Vector2.zero, new Vector2(navW, 52f));
-            NextButton = UIFactory.IconButton(footer, "Next", theme, Icon.ChevronRight, 52f, theme.ButtonRadius);
-            NextButton.GetComponent<RectTransform>().Pin(new Vector2(1, 0.5f), new Vector2(1, 0.5f), Vector2.zero, new Vector2(navW, 52f));
-            foreach (var nav in new[] { PrevButton, NextButton })
-            {
-                var icon = nav.transform.Find("Icon").GetComponent<RectTransform>();
-                icon.Stretch((navW - 26f) / 2f, 13f, (navW - 26f) / 2f, 13f);
-                nav.HoverScale = 1.04f;
-            }
-
-            pageLabel = UIFactory.Text(footer, "Page", theme, 16, TextAlignmentOptions.Center, theme.SubText, FontStyles.Bold, 3f);
-            pageLabel.rectTransform.Stretch(navW, 0, navW, 0);
-
-            status = UIFactory.Text(Panel, "Status", theme, 14, TextAlignmentOptions.Center, theme.SubText);
-            status.rectTransform.TopStrip(statusTop, 22f, Pad, Pad);
-            status.overflowMode = TextOverflowModes.Ellipsis;
         }
 
         public void SetTitle(string text) => title.text = text;
 
-        public void SetBackVisible(bool visible)
-        {
-            BackButton.gameObject.SetActive(visible);
-            float left = visible ? Pad + 40f + 14f : Pad + 4f;
-            float right = Pad + 40f * 2f + 8f + 12f;
-            brand.rectTransform.TopStrip(20f, 22f, left, right);
-            title.rectTransform.TopStrip(44f, 44f, left, right);
-        }
+        public void SetBackVisible(bool visible) => layout?.SetBackVisible(this, visible);
 
         public void SetPaging(int page, int pageCount)
         {

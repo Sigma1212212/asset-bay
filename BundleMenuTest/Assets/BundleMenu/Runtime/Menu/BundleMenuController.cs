@@ -49,6 +49,8 @@ namespace BundleMenu
         public ThemePreset theme = ThemePreset.Halo;
         [Tooltip("Used when Theme = Custom.")]
         public MenuTheme customTheme;
+        [Tooltip("Menu type (the panel's shape). -1 = whatever the theme pairs with.")]
+        public int menuStyle = -1;
 
         [Header("Placement")]
         public MenuPlacement placement = MenuPlacement.ScreenRight;
@@ -72,6 +74,8 @@ namespace BundleMenu
         public string backendUrl = FeedClient.DefaultBaseUrl;
         [Tooltip("Show video screens the feed places in the world. Off by default; players opt in.")]
         public bool broadcastScreens;
+        [Tooltip("Let other Asset Bay users in your room see your menu (theme, page, video). Only hashed ids are sent.")]
+        public bool menuSharing = true;
 
         [Header("Gun")]
         [Tooltip("Desktop: hold this to aim (right mouse by default), left-click to fire. VR: right grip + trigger.")]
@@ -107,6 +111,13 @@ namespace BundleMenu
         public bool BroadcastScreensOn => broadcastScreens;
         public MenuAnimator Animator { get; private set; }
         public MenuTheme CurrentTheme { get; private set; }
+        public PresenceClient Presence { get; private set; }
+        public RemoteMenus Remote { get; private set; }
+        /// <summary>The panel shape in use: the player's pick, or the theme's partner style.</summary>
+        public MenuStyle ActiveStyle => menuStyle >= 0 && Enum.IsDefined(typeof(MenuStyle), menuStyle)
+            ? (MenuStyle)menuStyle : CurrentTheme != null ? CurrentTheme.Style : MenuStyle.Classic;
+        public string MenuStyleName => (menuStyle < 0 ? "Match theme: " : "") + MenuStyles.Name(ActiveStyle);
+        public bool MenuSharing => menuSharing;
         public bool IsOpen => Animator != null && Animator.PanelTargetOpen;
 
         /// <summary>Head / hands provider. Game integrations replace this (see GorillaTagRig).</summary>
@@ -238,6 +249,21 @@ namespace BundleMenu
             Screens.ScreensEnabled = broadcastScreens;
             Screens.ViewCamera = () => Rig.Camera;
             if (Mods.Available) Gun.Register(new GrappleMode(Mods.Context));
+
+            // Menus seeing each other: only in Gorilla Tag (needs the room and player ids).
+            var gtPlayer = Mods.Context.Player;
+            if (gtPlayer != null)
+            {
+                Presence = gameObject.AddComponent<PresenceClient>();
+                Presence.Player = gtPlayer;
+                Presence.Endpoint = Feed.BaseUrl + "presence";
+                Presence.Sharing = menuSharing;
+                Presence.LocalState = BuildPresenceState;
+                Presence.Changed += () => dirty = true;
+                Remote = gameObject.AddComponent<RemoteMenus>();
+                Remote.Presence = Presence;
+                Remote.ViewCamera = () => Rig.Camera;
+            }
 
             CurrentTheme = ResolveTheme(theme);
             BuildView();
@@ -376,7 +402,7 @@ namespace BundleMenu
 
             if (placement == MenuPlacement.ScreenRight)
             {
-                view.Panel.anchoredPosition = new Vector2((1f - e) * (MenuView.Width * 0.6f), 0f);
+                view.Panel.anchoredPosition = new Vector2((1f - e) * (view.PanelWidth * 0.6f), 0f);
                 view.Panel.localScale = Vector3.one;
             }
             else
@@ -677,9 +703,7 @@ namespace BundleMenu
             if (index < 0 || index >= ThemePresets.PackThemes.Count) return;
             packTheme = index;
             CurrentTheme = ThemePresets.PackThemes[index];
-            BuildView();
-            ApplyPanelProgress(Animator.PanelProgress, Animator.PanelTargetOpen);
-            if (IsOpen) Render(animate: true);
+            RebuildLook();
             Toast($"Theme: {CurrentTheme.DisplayName}", ToastKind.Info);
         }
 
@@ -707,11 +731,60 @@ namespace BundleMenu
             theme = preset;
             CurrentTheme = ResolveTheme(theme);
             SavePrefs();
-            BuildView();
-            ApplyPanelProgress(Animator.PanelProgress, Animator.PanelTargetOpen);
-            if (IsOpen) Render(animate: true);
+            RebuildLook();
             Toast($"Theme: {CurrentTheme.DisplayName}", ToastKind.Info);
         }
+
+        /// <summary>Next / previous menu type. Order: Match theme, then every style.</summary>
+        public void CycleMenuStyle(int dir)
+        {
+            int slots = Enum.GetValues(typeof(MenuStyle)).Length + 1; // slot 0 = match theme (-1)
+            int next = ((menuStyle + 1 + dir) % slots + slots) % slots;
+            menuStyle = next - 1;
+            SavePrefs();
+            RebuildLook();
+            Toast($"Menu type: {MenuStyleName}", ToastKind.Info);
+        }
+
+        /// <summary>Rebuild the panel after a theme or style change, keeping open/closed state and placement.</summary>
+        private void RebuildLook()
+        {
+            BuildView();
+            if (IsOpen)
+            {
+                ApplyPlacement();          // the new shape may be a different size (Book is wide)
+                UpdateWorldPose(snap: true);
+            }
+            ApplyPanelProgress(Animator.PanelProgress, Animator.PanelTargetOpen);
+            if (IsOpen) Render(animate: true);
+        }
+
+        public void ToggleMenuSharing()
+        {
+            menuSharing = !menuSharing;
+            if (Presence != null) Presence.Sharing = menuSharing;
+            SavePrefs();
+            dirty = true;
+        }
+
+        private MenuState BuildPresenceState()
+        {
+            var t = CurrentTheme;
+            return new MenuState
+            {
+                open = IsOpen,
+                theme = Clip(t.DisplayName, 24),
+                style = MenuStyles.Name(ActiveStyle),
+                accent = "#" + ColorUtility.ToHtmlStringRGB(t.Accent),
+                accent2 = "#" + ColorUtility.ToHtmlStringRGB(t.Accent2),
+                panel = "#" + ColorUtility.ToHtmlStringRGB(t.PanelTop),
+                page = IsOpen && pages.Count > 0 ? Clip(pages.Peek().Title, 40) : null,
+                video = Tablet != null && Tablet.IsPlaying ? Clip(Tablet.NowPlaying, 48) : null,
+            };
+        }
+
+        private static string Clip(string s, int max) =>
+            string.IsNullOrEmpty(s) || s.Length <= max ? s : s.Substring(0, max - 3) + "...";
 
         public void SetSource(BundleSourceMode mode)
         {
@@ -802,16 +875,16 @@ namespace BundleMenu
 
         private void BuildView()
         {
-            view.Build(CurrentTheme, rowsPerPage,
+            view.Build(CurrentTheme, ActiveStyle, rowsPerPage,
                 $"{brand}  ·  v{(string.IsNullOrEmpty(versionLabel) ? Application.version : versionLabel)}");
-            host.sizeDelta = new Vector2(MenuView.Width, view.Height);
-            ((RectTransform)worldCanvas.transform).sizeDelta = new Vector2(MenuView.Width, view.Height);
+            host.sizeDelta = new Vector2(view.PanelWidth, view.Height);
+            ((RectTransform)worldCanvas.transform).sizeDelta = new Vector2(view.PanelWidth, view.Height);
 
             WireHeader(view);
 
             if (flatView != null)
             {
-                flatView.Build(CurrentTheme, rowsPerPage,
+                flatView.Build(CurrentTheme, ActiveStyle, rowsPerPage,
                     $"{brand}  ·  v{(string.IsNullOrEmpty(versionLabel) ? Application.version : versionLabel)}");
                 WireHeader(flatView);
             }
@@ -1011,6 +1084,9 @@ namespace BundleMenu
             guiScale = PlayerPrefs.GetFloat(Prefs + "guiscale", guiScale);
             guiView = (GuiView)PlayerPrefs.GetInt(Prefs + "guiview", (int)guiView);
             broadcastScreens = PlayerPrefs.GetInt(Prefs + "screens", broadcastScreens ? 1 : 0) == 1;
+            menuSharing = PlayerPrefs.GetInt(Prefs + "sharing", menuSharing ? 1 : 0) == 1;
+            menuStyle = PlayerPrefs.GetInt(Prefs + "style", menuStyle);
+            if (menuStyle >= 0 && !Enum.IsDefined(typeof(MenuStyle), menuStyle)) menuStyle = -1;
             if (!Enum.IsDefined(typeof(GuiView), guiView)) guiView = GuiView.Both;
             guiPosition = new Vector2(PlayerPrefs.GetFloat(Prefs + "guix", guiPosition.x), PlayerPrefs.GetFloat(Prefs + "guiy", guiPosition.y));
             theme = (ThemePreset)PlayerPrefs.GetInt(Prefs + "theme", (int)theme);
@@ -1038,6 +1114,8 @@ namespace BundleMenu
             PlayerPrefs.SetFloat(Prefs + "guiscale", guiScale);
             PlayerPrefs.SetInt(Prefs + "guiview", (int)guiView);
             PlayerPrefs.SetInt(Prefs + "screens", broadcastScreens ? 1 : 0);
+            PlayerPrefs.SetInt(Prefs + "sharing", menuSharing ? 1 : 0);
+            PlayerPrefs.SetInt(Prefs + "style", menuStyle);
             PlayerPrefs.SetFloat(Prefs + "guix", guiPosition.x);
             PlayerPrefs.SetFloat(Prefs + "guiy", guiPosition.y);
             PlayerPrefs.SetInt(Prefs + "version", PrefsVersion);

@@ -126,6 +126,14 @@ namespace BundleMenu
                 ShowChevron = true,
                 OnClick = () => ctx.Navigate(new ModsPage()),
             });
+            if (ctx.Presence != null)
+            {
+                var pr = ctx.Presence;
+                rows.Add(RowSpec.Info("users", "Asset Bay users here",
+                    !pr.Sharing ? "sharing off"
+                    : !string.IsNullOrEmpty(pr.LastError) ? "offline"
+                    : pr.Others.Count.ToString()));
+            }
             rows.Add(new RowSpec
             {
                 Key = "gun",
@@ -500,6 +508,8 @@ namespace BundleMenu
                     : null,
                 Cycle("theme", "Theme", ctx.CurrentTheme.DisplayName,
                     () => ctx.CycleTheme(+1), () => ctx.CycleTheme(-1)),
+                Cycle("menutype", "Menu type", ctx.MenuStyleName,
+                    () => ctx.CycleMenuStyle(+1), () => ctx.CycleMenuStyle(-1)),
                 Cycle("source", "Bundle source", ctx.SourceMode.ToString(),
                     () => ctx.SetSource(ctx.SourceMode == BundleSourceMode.Dummy ? BundleSourceMode.Local : BundleSourceMode.Dummy), null),
             };
@@ -514,6 +524,12 @@ namespace BundleMenu
                 ctx.ToggleUnloadMode, ctx.ToggleUnloadMode));
             rows.Add(Cycle("screens", "Broadcast screens", ctx.BroadcastScreensOn ? "on" : "off",
                 ctx.ToggleBroadcastScreens, ctx.ToggleBroadcastScreens));
+            if (ctx.Presence != null)
+                rows.Add(new RowSpec
+                {
+                    Key = "sharing", Label = "Menu sharing", Value = ctx.MenuSharing ? "on" : "off", IsOn = ctx.MenuSharing,
+                    OnClick = ctx.ToggleMenuSharing, OnAltClick = ctx.ToggleMenuSharing,
+                });
             rows.Add(new RowSpec { Key = "rescan", Label = "Rescan bundles", OnClick = ctx.Rescan });
             rows.Add(new RowSpec { Key = "clear", Label = "Clear spawned", Value = ctx.Spawner.Count.ToString(), OnClick = ctx.ClearSpawned });
             rows.Add(new RowSpec { Key = "unloadall", Label = "Unload everything", OnClick = ctx.UnloadEverything });

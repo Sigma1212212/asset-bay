@@ -6,7 +6,7 @@ using Object = UnityEngine.Object;
 
 namespace BundleMenu
 {
-    public enum Icon { ChevronLeft, ChevronRight, Close, Back, Gear, Home, Menu, Dot, Refresh }
+    public enum Icon { ChevronLeft, ChevronRight, Close, Back, Gear, Home, Menu, Dot, Refresh, Check, Power }
 
     /// <summary>
     /// Every sprite the menu uses, generated at runtime from signed-distance functions.
@@ -50,6 +50,53 @@ namespace BundleMenu
             s.name = "BundleMenu_" + key;
             Cache[key] = s;
             return s;
+        }
+
+        /// <summary>Tileable white surface texture (tint it with the Image colour).</summary>
+        public static Sprite Pattern(PanelPattern kind) => Get("pattern" + kind, () => BuildPattern(kind));
+
+        private static Sprite BuildPattern(PanelPattern kind)
+        {
+            const int n = 128;
+            var px = new Color32[n * n];
+            for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+            {
+                float a = 0f;
+                switch (kind)
+                {
+                    case PanelPattern.Wood:
+                    {
+                        // Long horizontal grain: bands warped by a slow wobble, plus a knot.
+                        float warp = 3f * Mathf.Sin(x * 2f * Mathf.PI / n) + 1.5f * Mathf.Sin(x * 6f * Mathf.PI / n + y * 0.2f);
+                        float band = Mathf.Sin((y + warp) * 2f * Mathf.PI / 9f);
+                        float fine = Mathf.Sin((y + warp * 1.7f) * 2f * Mathf.PI / 3.2f);
+                        var k = new Vector2(x - 90f, (y - 40f) * 2.2f);
+                        float knot = Mathf.Clamp01(1f - k.magnitude / 22f) * (0.5f + 0.5f * Mathf.Sin(k.magnitude * 0.9f));
+                        a = 0.35f * Mathf.Clamp01(band * 0.5f + 0.5f) + 0.15f * Mathf.Clamp01(fine) + 0.5f * knot;
+                        break;
+                    }
+                    case PanelPattern.Scanlines:
+                        a = (y % 4) < 2 ? 0.55f : 0f;
+                        break;
+                    case PanelPattern.Grid:
+                        a = (x % 16 == 0 || y % 16 == 0) ? 0.6f : ((x % 16 == 8 && y % 16 == 8) ? 0.4f : 0f);
+                        break;
+                    case PanelPattern.Paper:
+                    {
+                        uint h = (uint)(x * 374761393 + y * 668265263);
+                        h = (h ^ (h >> 13)) * 1274126177u;
+                        float noise = (h & 0xFFFF) / 65535f;
+                        float fibre = Mathf.Abs(Mathf.Sin(x * 0.37f + y * 0.11f + noise * 2f));
+                        a = 0.18f * noise + 0.12f * (fibre > 0.97f ? 1f : 0f);
+                        break;
+                    }
+                }
+                px[y * n + x] = new Color32(255, 255, 255, (byte)(Mathf.Clamp01(a) * 255f));
+            }
+            var sprite = MakeSprite(px, n, Vector4.zero);
+            sprite.texture.wrapMode = TextureWrapMode.Repeat;
+            return sprite;
         }
 
         // ------------------------------------------------------------------ rounded rects
@@ -164,6 +211,16 @@ namespace BundleMenu
                     float gap = (ang > 20f && ang < 75f) ? 99f : 0f;       // open wedge at top-right
                     float head = Poly(p, w, new Vector2(42, 10), new Vector2(46, 20), new Vector2(35, 22));
                     return Mathf.Min(Mathf.Max(ring, gap - 1f), head);
+                }
+                case Icon.Check:
+                    return Poly(p, w * 1.25f, new Vector2(17, 34), new Vector2(28, 45), new Vector2(47, 21));
+                case Icon.Power:
+                {
+                    var c = p - new Vector2(32, 34);
+                    float ring = Mathf.Abs(c.magnitude - 16f) - w;
+                    float ang = Mathf.Atan2(-c.y, c.x) * Mathf.Rad2Deg;
+                    float gap = (ang > 55f && ang < 125f) ? 99f : 0f; // open at the top
+                    return Mathf.Min(Mathf.Max(ring, gap - 1f), Seg(p, new Vector2(32, 10), new Vector2(32, 32)) - w);
                 }
                 default:
                     return 99f;

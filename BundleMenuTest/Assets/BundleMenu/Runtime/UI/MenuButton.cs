@@ -31,12 +31,19 @@ namespace BundleMenu
         /// <summary>Scale to use when hovered. Rows use a subtle 1.02, icon buttons a punchier 1.1.</summary>
         public float HoverScale = 1.025f;
         public float PressScale = 0.95f;
+        /// <summary>Scales the fill's alpha in every state (borderless row looks use ~0-0.3).</summary>
+        public float FillAlpha = 1f;
+        /// <summary>How far the button travels down onto its base when pressed (0 = flat button).</summary>
+        public float PressDepth;
+        /// <summary>The base it stands on. Shown / hidden together with the button.</summary>
+        [NonSerialized] public GameObject Base;
 
         private bool isOn;
         private SelectionState visualState = SelectionState.Normal;
         private Color fillTarget, edgeTarget;
         private float scaleTarget = 1f, scale = 1f, scaleVelocity;
-        private float slideTarget, slide;
+        private float slideTarget, slide, press;
+        private Vector2 applied; // offset currently added to our position (slide + press)
         private float lastClickTime = -1f;
 
         public void Init(MenuTheme theme, Image fill, Image edge)
@@ -60,7 +67,18 @@ namespace BundleMenu
             scale = scaleTarget = 1f;
             scaleVelocity = 0f;
             transform.localScale = Vector3.one;
+            if (Base != null) Base.SetActive(true);
             Retarget(instant: true);
+        }
+
+        protected override void OnDisable()
+        {
+            base.OnDisable();
+            if (Base != null) Base.SetActive(false);
+            // Drop any hover / press offset so the layout position is intact next time.
+            if (applied != Vector2.zero && transform is RectTransform rt) rt.anchoredPosition -= applied;
+            applied = Vector2.zero;
+            slide = press = 0f;
         }
 
         public void OnPointerClick(PointerEventData eventData)
@@ -169,6 +187,7 @@ namespace BundleMenu
             }
 
             if (visualState != SelectionState.Highlighted) slideTarget = 0f;
+            fill.a *= FillAlpha;
             fillTarget = fill;
             edgeTarget = edge;
 
@@ -192,9 +211,17 @@ namespace BundleMenu
             scale += scaleVelocity * dt;
             transform.localScale = new Vector3(scale, scale, 1f);
 
+            // Offsets on top of wherever the layout put us: sideways slide on hover, and pressing down
+            // onto the base (fast on the way down, springier on the way up).
             slide = Mathf.Lerp(slide, slideTarget, k);
-            if (Mathf.Abs(slide) > 0.01f || slideTarget != 0f)
-                ((RectTransform)transform).anchoredPosition = new Vector2(slide, ((RectTransform)transform).anchoredPosition.y);
+            float pressTarget = visualState == SelectionState.Pressed ? PressDepth : 0f;
+            press = Mathf.Lerp(press, pressTarget, 1f - Mathf.Exp(-dt * (pressTarget > press ? 40f : 16f)));
+            var want = new Vector2(slide, -press);
+            if ((want - applied).sqrMagnitude > 0.0001f)
+            {
+                ((RectTransform)transform).anchoredPosition += want - applied;
+                applied = want;
+            }
         }
     }
 }

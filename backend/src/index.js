@@ -3,34 +3,68 @@
 //   GET /asset-bay/health          -> {"ok":true}
 //   GET /asset-bay/feed            -> {"feed": "<exact feed.json text>", "sig": "<base64 RSA signature>"}
 //   GET /asset-bay/media/<key>     -> a file from the R2 bucket (videos, bundles), with Range support
+//   POST /asset-bay/presence       -> menus in the same room find each other (hashed ids only, see presence.js)
+//   GET /asset-bay/budget          -> today's / this month's usage against the free-tier cut-offs (budget.js)
 //
-// Read-only by design: there are no upload or admin routes, so there is nothing here to break into.
+// Spending guard: every feature switches itself off before Cloudflare could bill for it, and comes back
+// when the day / month rolls over. Paused features answer 503 {"paused": ...}; the menu shows "offline".
+//
+// Read-only for content: there are no upload or admin routes. The only write is presence, which keeps
+// hashed, size-capped state in memory for 15 seconds.
 // Content is published from your PC with publish-feed.ps1 (wrangler writes to R2 directly), and the
 // menu only trusts a feed whose signature matches the public key built into it.
+
+import { handlePresence, PresenceRoom } from "./presence.js";
+import { Budget, count, flush, isPaused, report } from "./budget.js";
+export { PresenceRoom, Budget };
 
 const PREFIX = "/asset-bay";
 const SAFE_KEY = /^[A-Za-z0-9][A-Za-z0-9._\-\/]{0,200}$/;
 
 export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
-    if (!url.pathname.startsWith(PREFIX)) return notFound();
-    const path = url.pathname.slice(PREFIX.length) || "/";
-
-    if (request.method !== "GET" && request.method !== "HEAD") {
-      return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
-    }
-
+  async fetch(request, env, ctx) {
+    count("requests");
     try {
-      if (path === "/health") return json({ ok: true });
-      if (path === "/feed") return await feed(env);
-      if (path.startsWith("/media/")) return await media(request, env, decodeURIComponent(path.slice("/media/".length)));
-      return notFound();
-    } catch (err) {
-      return json({ error: "internal error" }, 500);
+      return await route(request, env);
+    } finally {
+      // Report after the request is counted in full, without delaying the response.
+      ctx?.waitUntil?.(flush(env));
     }
   },
 };
+
+async function route(request, env) {
+  const url = new URL(request.url);
+  if (!url.pathname.startsWith(PREFIX)) return notFound();
+  const path = url.pathname.slice(PREFIX.length) || "/";
+
+  // The usage report stays reachable while paused, so you can see why (80k cap leaves 20k of headroom).
+  if (path === "/budget" && request.method === "GET") return json(await report(env), 200, { "Cache-Control": "no-store" });
+  if (isPaused("all")) return pausedResponse("daily request allowance");
+
+  if (path === "/presence") {
+    if (isPaused("presence")) return pausedResponse("daily Durable Object allowance");
+    count("doCalls");
+    return await handlePresence(request, env);
+  }
+
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
+  }
+
+  try {
+    if (path === "/health") return json({ ok: true });
+    if (path === "/feed" || path.startsWith("/media/")) {
+      if (isPaused("r2")) return pausedResponse("monthly R2 read allowance");
+      if (path === "/feed") { count("r2Reads", 2); return await feed(env); }
+      count("r2Reads");
+      return await media(request, env, decodeURIComponent(path.slice("/media/".length)));
+    }
+    return notFound();
+  } catch (err) {
+    return json({ error: "internal error" }, 500);
+  }
+}
 
 async function feed(env) {
   const [body, sig] = await Promise.all([env.MEDIA.get("feed.json"), env.MEDIA.get("feed.json.sig")]);
@@ -78,6 +112,14 @@ function json(data, status = 200, extra = {}) {
     status,
     headers: { "Content-Type": "application/json; charset=utf-8", ...extra },
   });
+}
+
+function pausedResponse(what) {
+  // Retry-After: seconds until the next UTC midnight (daily limits) - monthly ones just keep saying so.
+  const now = new Date();
+  const midnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+  return json({ error: "paused to stay in the free tier", paused: what }, 503,
+    { "Retry-After": String(Math.ceil((midnight - now.getTime()) / 1000)) });
 }
 
 function notFound() {

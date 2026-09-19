@@ -8,6 +8,24 @@ routes = [
   { pattern = "assetbay.randomthingsthatarecool.dev", custom_domain = true }
 ]
 
+# Presence rooms (menus seeing each other). SQLite-backed class so it runs on the Workers Free plan.
+[[durable_objects.bindings]]
+name = "PRESENCE"
+class_name = "PresenceRoom"
+
+# Spending guard counter (see src/budget.js). One instance, keyed "global".
+[[durable_objects.bindings]]
+name = "BUDGET"
+class_name = "Budget"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["PresenceRoom"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Budget"]
+
 # Videos, bundles and the signed feed live in this R2 bucket.
 [[r2_buckets]]
 binding = "MEDIA"

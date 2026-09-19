@@ -58,6 +58,27 @@ try {
   check("writes rejected", r.status === 405);
   r = await get("/asset-bay/admin");
   check("unknown routes 404", r.status === 404);
+
+  // ---- presence
+  const h = (c) => c.repeat(64);
+  const post = (body) => get("/asset-bay/presence", { method: "POST", body: JSON.stringify(body) });
+  r = await post({ room: h("a"), player: h("1"), state: { open: true, theme: "Neon" } });
+  check("presence: first player joins", r.status === 200 && (await r.json()).members.length === 0);
+  r = await post({ room: h("a"), player: h("2"), state: { open: false, theme: "Halo" } });
+  let j = await r.json();
+  check("presence: second player sees the first", j.members.length === 1 && j.members[0].state.theme === "Neon");
+  r = await post({ room: h("b"), player: h("3"), state: {} });
+  check("presence: other rooms are separate", (await r.json()).members.length === 0);
+  r = await post({ room: h("a"), player: h("1"), state: null });
+  r = await post({ room: h("a"), player: h("2"), state: { open: true } });
+  // player 2 posted <1 s ago, so its state update is ignored but it still gets the member list
+  check("presence: leaving removes you", (await r.json()).members.length === 0);
+  r = await post({ room: "not-a-hash", player: h("1"), state: {} });
+  check("presence: bad ids rejected", r.status === 400);
+  r = await post({ room: h("c"), player: h("4"), state: { junk: "x".repeat(600) } });
+  check("presence: oversized state rejected", r.status === 413);
+  r = await get("/asset-bay/presence");
+  check("presence: GET rejected", r.status === 405);
 } catch (e) {
   check("no exceptions", false, e.stack);
 } finally {

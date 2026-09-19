@@ -5,7 +5,7 @@ using UnityEngine;
 namespace BundleMenu
 {
     // New presets go after Custom so the numbers already saved in players' settings keep meaning the same theme.
-    public enum ThemePreset { Halo, Solstice, Circuit, Velvet, Custom, Arcade, Glass, Minimal, Neon }
+    public enum ThemePreset { Halo, Solstice, Circuit, Velvet, Custom, Arcade, Glass, Minimal, Neon, Timber, Parchment }
 
     /// <summary>How rows are arranged: a single column, or two columns of tiles.</summary>
     public enum ThemeLayout { List, Grid }
@@ -67,6 +67,16 @@ namespace BundleMenu
         [Tooltip("Entrance animation this theme prefers (-1 = use the menu setting).")]
         public int EntranceOverride = -1;
 
+        [Header("Shape")]
+        [Tooltip("Menu type used when the player's Menu type setting is 'Match theme'.")]
+        public MenuStyle Style = MenuStyle.Classic;
+        public PanelPattern Pattern = PanelPattern.None;
+        [Tooltip("Panel thickness in UI units: the visible edge under the panel, and the 3D slab behind it in the world.")]
+        [Range(0, 32)] public float Depth = 12f;
+        [Tooltip("How far buttons stand off their base; they travel down this far when pressed.")]
+        [Range(0, 10)] public float ButtonDepth = 4f;
+        public Color PatternColor = new Color(1, 1, 1, 0.06f);
+
         [Header("Status lights")]
         public Color StatusIdle = Hex(0x5A6290);
         public Color StatusBusy = Hex(0xFFB547);
@@ -117,6 +127,7 @@ namespace BundleMenu
                 // Night-sky glass: cyan-to-violet rim, soft glow, filled pills. The default.
                 case ThemePreset.Halo:
                     t.DisplayName = "Halo";
+                    t.EdgeBottom = MenuTheme.Hex(0x2BB8D0); t.GlowStrength = 0f; t.Accent2 = MenuTheme.Hex(0x2BB8D0);
                     break;
 
                 // Warm daylight: cream panel, coral rim, chunky rounded buttons, dark text.
@@ -137,6 +148,8 @@ namespace BundleMenu
                     t.LabelStyle = FontStyles.Bold; t.TitleStyle = FontStyles.Bold;
                     t.StatusIdle = MenuTheme.Hex(0xD9C2B0); t.StatusBusy = MenuTheme.Hex(0xF2A33A);
                     t.StatusOk = MenuTheme.Hex(0x2DBE72); t.StatusError = MenuTheme.Hex(0xE8334F);
+                    t.Style = MenuStyle.Switchboard;
+                    t.GlowStrength = 0f; t.Depth = 14f; t.ButtonDepth = 5f;
                     break;
 
                 // Oscilloscope: black glass, phosphor green, square corners, outlined buttons, spaced caps.
@@ -158,6 +171,8 @@ namespace BundleMenu
                     t.TitleStyle = FontStyles.UpperCase | FontStyles.Bold; t.TitleSpacing = 10f;
                     t.StatusIdle = MenuTheme.Hex(0x1F4A33); t.StatusBusy = MenuTheme.Hex(0xE8FF5A);
                     t.StatusOk = MenuTheme.Hex(0x39FF88); t.StatusError = MenuTheme.Hex(0xFF5A5A);
+                    t.Style = MenuStyle.Console; t.Pattern = PanelPattern.Scanlines; t.PatternColor = MenuTheme.Hex(0x39FF88, 0.05f);
+                    t.GlowStrength = 0f; t.Depth = 8f; t.ButtonDepth = 3f;
                     break;
 
                 // Theatre: deep wine panel, brushed-gold rim and accents, small caps, slim outlined buttons.
@@ -179,6 +194,8 @@ namespace BundleMenu
                     t.TitleStyle = FontStyles.SmallCaps | FontStyles.Bold; t.TitleSpacing = 3f;
                     t.StatusIdle = MenuTheme.Hex(0x6B3A52); t.StatusBusy = MenuTheme.Hex(0xF2C14E);
                     t.StatusOk = MenuTheme.Hex(0x7EE0A1); t.StatusError = MenuTheme.Hex(0xFF6B6B);
+                    t.Style = MenuStyle.Pillars;
+                    t.GlowStrength = 0f; t.Depth = 12f;
                     break;
 
                 // Arcade: chunky two-column tiles, bold caps, a bouncy pop-in.
@@ -199,6 +216,7 @@ namespace BundleMenu
                     t.Layout = ThemeLayout.Grid; t.Hover = HoverStyle.Grow;
                     t.RowHeight = 64f; t.RowSpacing = 10f; t.LabelSize = 17f; t.ValueSize = 13f;
                     t.EntranceOverride = (int)EntranceStyle.Pop;
+                    t.GlowStrength = 0f; t.Depth = 18f; t.ButtonDepth = 6f;
                     break;
 
                 // Glass: see-through frosted panel, soft white edges, light text.
@@ -215,6 +233,8 @@ namespace BundleMenu
                     t.Text = MenuTheme.Hex(0xFFFFFF); t.SubText = MenuTheme.Hex(0xDDE6FF, 0.75f);
                     t.Hover = HoverStyle.Glow;
                     t.EntranceOverride = (int)EntranceStyle.Fade;
+                    t.Style = MenuStyle.Cards;
+                    t.GlowStrength = 0f; t.Depth = 3f; t.ButtonDepth = 1.5f;
                     break;
 
                 // Minimal: no boxes, just text rows with a thin accent line; hovering slides the row.
@@ -232,6 +252,8 @@ namespace BundleMenu
                     t.RowHeight = 44f; t.RowSpacing = 2f; t.LabelSize = 19f; t.ValueSize = 14f;
                     t.EntranceOverride = (int)EntranceStyle.SlideRight;
                     t.StatusIdle = MenuTheme.Hex(0x3A3A3A);
+                    t.Style = MenuStyle.Checklist;
+                    t.Depth = 0f; t.ButtonDepth = 0f;
                     break;
 
                 // Neon: black glass, hot pink / cyan tubes that flicker, outlined rows.
@@ -250,6 +272,54 @@ namespace BundleMenu
                     t.LabelSpacing = 1.5f; t.TitleStyle = FontStyles.Bold | FontStyles.Italic;
                     t.Hover = HoverStyle.Glow; t.Flicker = 0.6f;
                     t.EntranceOverride = (int)EntranceStyle.Cascade;
+                    t.Style = MenuStyle.Pillars; t.Pattern = PanelPattern.Grid; t.PatternColor = MenuTheme.Hex(0x22E4FF, 0.05f);
+                    t.Depth = 6f; t.ButtonDepth = 2f;
+                    break;
+
+                // Timber: a carved wooden sign. Wood grain, pale planks, rope-hung. Pairs with Signboard.
+                case ThemePreset.Timber:
+                    t.DisplayName = "Timber";
+                    t.PanelTop = MenuTheme.Hex(0x7A4E2D); t.PanelBottom = MenuTheme.Hex(0x4E3019);
+                    t.EdgeTop = MenuTheme.Hex(0x3A2211); t.EdgeBottom = MenuTheme.Hex(0x24150A);
+                    t.EdgeWidth = 5f; t.PanelRadius = 12f; t.GlowStrength = 0f;
+                    t.Accent = MenuTheme.Hex(0xF4C95D); t.Accent2 = MenuTheme.Hex(0xE08A3C);
+                    t.ButtonRadius = 8f;
+                    t.ButtonFill = MenuTheme.Hex(0xD9C3A0); t.ButtonFillHover = MenuTheme.Hex(0xEBD8B6);
+                    t.ButtonFillPressed = MenuTheme.Hex(0xC4A87F);
+                    t.ButtonEdge = MenuTheme.Hex(0x3A2211, 0.6f); t.ButtonEdgeHover = MenuTheme.Hex(0xF4C95D);
+                    t.ButtonEdgeWidth = 2f;
+                    t.Text = MenuTheme.Hex(0x2E1C0E); t.SubText = MenuTheme.Hex(0xF1DEC0);
+                    t.LabelStyle = FontStyles.UpperCase | FontStyles.Bold; t.LabelSpacing = 3f;
+                    t.TitleStyle = FontStyles.UpperCase | FontStyles.Bold; t.TitleSpacing = 6f;
+                    t.StatusIdle = MenuTheme.Hex(0x8C6A4A); t.StatusBusy = MenuTheme.Hex(0xE0A030);
+                    t.StatusOk = MenuTheme.Hex(0x4C9A2A); t.StatusError = MenuTheme.Hex(0xC0392B);
+                    t.Hover = HoverStyle.Grow; t.RowHeight = 50f; t.LabelSize = 18f;
+                    t.EntranceOverride = (int)EntranceStyle.Pop;
+                    t.Style = MenuStyle.Signboard; t.Pattern = PanelPattern.Wood; t.PatternColor = MenuTheme.Hex(0x1E1008, 0.35f);
+                    t.Depth = 22f; t.ButtonDepth = 5f;
+                    break;
+
+                // Parchment: an old field journal. Cream paper, ink text, leather spine. Pairs with Book.
+                case ThemePreset.Parchment:
+                    t.DisplayName = "Parchment";
+                    t.PanelTop = MenuTheme.Hex(0xF3E7C9); t.PanelBottom = MenuTheme.Hex(0xE6D3A8);
+                    t.EdgeTop = MenuTheme.Hex(0x6B3F22); t.EdgeBottom = MenuTheme.Hex(0x4A2A15);
+                    t.EdgeWidth = 6f; t.PanelRadius = 10f; t.GlowStrength = 0.15f;
+                    t.Accent = MenuTheme.Hex(0x8C2F1B); t.Accent2 = MenuTheme.Hex(0x2F5D8C);
+                    t.ButtonRadius = 6f;
+                    t.ButtonFill = MenuTheme.Hex(0xFFF8E6, 0.9f); t.ButtonFillHover = MenuTheme.Hex(0xFFFDF4);
+                    t.ButtonFillPressed = MenuTheme.Hex(0xE9D9B4);
+                    t.ButtonEdge = MenuTheme.Hex(0x6B3F22, 0.35f); t.ButtonEdgeHover = MenuTheme.Hex(0x8C2F1B);
+                    t.ButtonEdgeWidth = 1.5f;
+                    t.Text = MenuTheme.Hex(0x2B1D12); t.SubText = MenuTheme.Hex(0x7D6247);
+                    t.LabelStyle = FontStyles.SmallCaps; t.LabelSpacing = 1.5f;
+                    t.TitleStyle = FontStyles.SmallCaps | FontStyles.Bold | FontStyles.Italic; t.TitleSpacing = 2f;
+                    t.StatusIdle = MenuTheme.Hex(0xB9A27E); t.StatusBusy = MenuTheme.Hex(0xC98A2E);
+                    t.StatusOk = MenuTheme.Hex(0x3E7D3A); t.StatusError = MenuTheme.Hex(0xA8322D);
+                    t.RowHeight = 52f; t.LabelSize = 19f;
+                    t.EntranceOverride = (int)EntranceStyle.Fade;
+                    t.Style = MenuStyle.Book; t.Pattern = PanelPattern.Paper; t.PatternColor = MenuTheme.Hex(0x6B3F22, 0.5f);
+                    t.GlowStrength = 0f; t.Depth = 16f; t.ButtonDepth = 3f;
                     break;
 
                 default:

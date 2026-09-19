@@ -13,9 +13,10 @@ An in-game menu for listing, loading, unloading and spawning Unity **AssetBundle
 | `BundleMenuTest/Assets/BundleMenu/` | **The deliverable.** Copy this folder into any Unity 2021.3+ project. |
 | `BundleMenuTest/` | Unity 2022.3 test project: sample bundles, test scene, automated test director. |
 | `Injectable/` | Builds the same runtime code into `BundleMenu.dll` against Gorilla Tag's Unity 6000.2 assemblies. |
-| `Injector/` | **Asset Bay Launcher**: GPL-3.0 fork of hamburbur-injector. Auto-updates from your GitHub releases, can test local builds, themed like the menu. |
+| `Injector/` | Local copy of the [launcher](https://github.com/Sigma1212212/asset-bay-launcher) (its own MIT repo). Pulls the newest menu from this repo's releases, with a built-in copy as the offline fallback. |
 | `publish.ps1` | Builds `BundleMenu.dll` and publishes it as a GitHub release (with SHA-256). |
-| `LICENSING.md` | What you can and can't reuse from hamburbur / hamburbur-injector, and why. |
+| `LICENSE` | MIT. |
+| `LICENSING.md` | Licences of this repo, the launcher, and the third-party files the test project includes. |
 
 ---
 

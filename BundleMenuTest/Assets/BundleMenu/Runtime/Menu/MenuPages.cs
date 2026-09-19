@@ -217,11 +217,16 @@ namespace BundleMenu
                     OnClick = ctx.ReplayEntrance },
                 Cycle("placement", "Placement", PlacementName(ctx.Placement),
                     () => ctx.CyclePlacement(+1), () => ctx.CyclePlacement(-1)),
+                ctx.Placement == MenuPlacement.ClickGui
+                    ? Cycle("guisize", "GUI size", ctx.GuiSizeName, () => ctx.CycleGuiSize(+1), () => ctx.CycleGuiSize(-1))
+                    : null,
                 Cycle("theme", "Theme", ctx.CurrentTheme.DisplayName,
                     () => ctx.CycleTheme(+1), () => ctx.CycleTheme(-1)),
                 Cycle("source", "Bundle source", ctx.SourceMode.ToString(),
                     () => ctx.SetSource(ctx.SourceMode == BundleSourceMode.Dummy ? BundleSourceMode.Local : BundleSourceMode.Dummy), null),
             };
+
+            rows.RemoveAll(r => r == null);
 
             if (ctx.SourceMode == BundleSourceMode.Dummy)
                 rows.Add(Cycle("fail", "Dummy fail rate", $"{ctx.DummyFailRate * 100f:0}%",
@@ -236,7 +241,8 @@ namespace BundleMenu
         }
 
         public static string PlacementName(MenuPlacement p) =>
-            p == MenuPlacement.ScreenRight ? "Screen" : p == MenuPlacement.Floating ? "Floating" : "Wrist";
+            p == MenuPlacement.ScreenRight ? "Screen" : p == MenuPlacement.Floating ? "Floating"
+            : p == MenuPlacement.Wrist ? "Wrist" : "Click GUI";
 
         private static RowSpec Cycle(string key, string label, string value, Action next, Action prev) =>
             new RowSpec { Key = key, Label = label, Value = value, OnClick = next, OnAltClick = prev ?? next };

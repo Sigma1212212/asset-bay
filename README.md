@@ -3,7 +3,7 @@
 An in-game menu for listing, loading, unloading and spawning Unity **AssetBundles**. Features:
 - animated entrances you can switch at runtime
 - four original themes
-- three placements: right side of the screen, floating in front of you, or on your wrist
+- four placements: right side of the screen, floating in front of you, on your wrist, or a click GUI window (desktop)
 - a dummy mode, so you can test with no real bundles
 
 **Play it in Gorilla Tag:** download the launcher from [asset-bay-launcher releases](https://github.com/Sigma1212212/asset-bay-launcher/releases/latest). Start the game, run `AssetBayLauncher.exe`, click **Inject latest**, then press Tab in game.
@@ -48,6 +48,8 @@ There are three layers, and dependencies point one way only. The UI never touche
 | `UI/RowView.cs`, `UI/MenuView.cs` | Build and render the panel. |
 | `Menu/MenuPages.cs` | Library, Category, Bundle detail and Settings pages. Each one only returns rows. |
 | `Menu/BundleMenuController.cs` | The one component you add. Wires everything together. |
+| `Menu/ClickGui.cs` | Desktop "click GUI": the real world-space panel is parked off-map on its own layer, a hidden camera renders it into a draggable on-screen window, and clicks are mapped back onto it. |
+| `Menu/DesktopPointer.cs` | All mouse input, read directly instead of through the EventSystem (works in games like Gorilla Tag whose EventSystem is VR-only). Hover, press, click, scroll-to-page, window dragging. |
 | `Menu/Placement.cs` | `MenuPlacement`, `IRigProvider`, and `PokeInteractor` (VR fingertip presses without physics). |
 | `Menu/MenuInput.cs` | Works with the new Input System, the legacy Input Manager, or both. Also reads a VR controller button. |
 | `Integration/Loader.cs`, `GorillaTagRig.cs` | Entry point for loading from outside a Unity project, and a reflection-based rig adapter for Gorilla Tag. |
@@ -105,7 +107,7 @@ BundleMenu World (Canvas: World Space)
 |---|---|
 | `Tab`, or the corner button, or VR **Y** | Open / close |
 | `F2` | Cycle entrance animation |
-| `F3` | Cycle placement: Screen → Floating → Wrist |
+| `F3` | Cycle placement: Screen → Floating → Wrist → Click GUI |
 | `F4` | Cycle theme |
 | `Esc` / `Backspace` | Back (Esc closes the menu when you're on the first page) |
 | `PageUp` / `PageDown` | Previous / next page |

@@ -78,12 +78,34 @@ namespace BundleMenu
         }
 
         /// <summary>For non-pointer interactors (VR finger poke): drive hover / press / click.</summary>
-        public void SetPokeHover(bool hovering)
+        public void SetPokeHover(bool hovering) => SimHover(hovering);
+
+        // ---- simulated pointer (click GUI, desktop mouse, VR poke). Goes through the same Selectable
+        //      handlers a real EventSystem pointer would, so states and visuals are identical.
+
+        private static PointerEventData SimData(bool right) =>
+            new PointerEventData(EventSystem.current)
+            {
+                button = right ? PointerEventData.InputButton.Right : PointerEventData.InputButton.Left,
+            };
+
+        public void SimHover(bool hovering)
         {
-            if (!IsInteractable()) return;
-            if (EventSystem.current == null) { DoStateTransition(hovering ? SelectionState.Highlighted : SelectionState.Normal, false); return; }
-            var data = new PointerEventData(EventSystem.current) { button = PointerEventData.InputButton.Left };
-            if (hovering) OnPointerEnter(data); else OnPointerExit(data);
+            if (hovering) OnPointerEnter(SimData(false)); else OnPointerExit(SimData(false));
+        }
+
+        public void SimDown(bool right = false)
+        {
+            if (!IsActive() || !IsInteractable()) return;
+            OnPointerDown(SimData(right));
+        }
+
+        /// <summary>Release; fires the click when the pointer is still over this button.</summary>
+        public void SimUp(bool click, bool right = false)
+        {
+            var data = SimData(right);
+            OnPointerUp(data);
+            if (click) OnPointerClick(data);
         }
 
         public void PokePress()

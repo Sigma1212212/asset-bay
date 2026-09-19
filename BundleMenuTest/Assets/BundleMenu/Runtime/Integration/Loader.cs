@@ -79,9 +79,11 @@ namespace BundleMenu
                     if (gtRig != null)
                     {
                         menu.Rig = gtRig;
-                        menu.placement = MenuPlacement.Wrist;
                         menu.wristOffset = new Vector3(0f, 0.07f, 0.03f);
                     }
+                    // VR headset: menu on the wrist, pressed with your finger.
+                    // Desktop / PC mode: the click GUI - a window in front of you, clicked with the mouse.
+                    menu.placement = MenuInput.VRActive ? MenuPlacement.Wrist : MenuPlacement.ClickGui;
 
                     menuRoot.SetActive(true);
                     Debug.Log($"[BundleMenu] Loaded v{menu.versionLabel} ({(gtRig != null ? "Gorilla Tag rig" : "generic camera rig")}). Press Tab to open.");

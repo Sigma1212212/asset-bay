@@ -8,6 +8,7 @@ namespace BundleMenu
         ScreenRight,     // classic overlay on the right edge of the screen (mouse / keyboard)
         Floating,        // world-space panel hovering in front of you, lazily follows your view
         Wrist,           // world-space panel attached to a hand / wrist anchor
+        ClickGui,        // desktop: the world panel lives hidden off-map, a camera renders it into a clickable on-screen window
     }
 
     /// <summary>

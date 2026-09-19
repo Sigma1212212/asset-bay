@@ -44,6 +44,76 @@ namespace BundleMenu
             return false;
         }
 
+        // ------------------------------------------------------------------ mouse
+        // Read directly (not through the EventSystem) so clicks work even in games whose EventSystem
+        // is set up for VR only, like Gorilla Tag.
+
+        public static Vector2 MousePosition
+        {
+            get
+            {
+#if ENABLE_INPUT_SYSTEM
+                var mouse = Mouse.current;
+                if (mouse != null) return mouse.position.ReadValue();
+#endif
+#if ENABLE_LEGACY_INPUT_MANAGER || !ENABLE_INPUT_SYSTEM
+                if (!legacyBroken)
+                {
+                    try { return Input.mousePosition; }
+                    catch (InvalidOperationException) { legacyBroken = true; }
+                }
+#endif
+                return new Vector2(-1, -1);
+            }
+        }
+
+        /// <summary>0 = left, 1 = right.</summary>
+        public static bool MouseHeld(int button)
+        {
+#if ENABLE_INPUT_SYSTEM
+            var mouse = Mouse.current;
+            if (mouse != null) return button == 0 ? mouse.leftButton.isPressed : mouse.rightButton.isPressed;
+#endif
+#if ENABLE_LEGACY_INPUT_MANAGER || !ENABLE_INPUT_SYSTEM
+            if (!legacyBroken)
+            {
+                try { return Input.GetMouseButton(button); }
+                catch (InvalidOperationException) { legacyBroken = true; }
+            }
+#endif
+            return false;
+        }
+
+        /// <summary>Scroll wheel this frame: positive = up.</summary>
+        public static float Scroll
+        {
+            get
+            {
+#if ENABLE_INPUT_SYSTEM
+                var mouse = Mouse.current;
+                if (mouse != null) return Mathf.Sign(mouse.scroll.ReadValue().y) * (Mathf.Abs(mouse.scroll.ReadValue().y) > 0.01f ? 1f : 0f);
+#endif
+#if ENABLE_LEGACY_INPUT_MANAGER || !ENABLE_INPUT_SYSTEM
+                if (!legacyBroken)
+                {
+                    try { return Mathf.Sign(Input.mouseScrollDelta.y) * (Mathf.Abs(Input.mouseScrollDelta.y) > 0.01f ? 1f : 0f); }
+                    catch (InvalidOperationException) { legacyBroken = true; }
+                }
+#endif
+                return 0f;
+            }
+        }
+
+        /// <summary>True when a VR headset is actually running (as opposed to desktop / PC mode).</summary>
+        public static bool VRActive
+        {
+            get
+            {
+                try { return XRSettings.isDeviceActive; }
+                catch { return false; }
+            }
+        }
+
         /// <summary>Rising edge of a VR controller button (works with any XR plugin via UnityEngine.XR).</summary>
         public static bool VRButtonDown(VRToggleButton button)
         {

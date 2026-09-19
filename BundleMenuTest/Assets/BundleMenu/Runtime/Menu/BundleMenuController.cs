@@ -67,6 +67,10 @@ namespace BundleMenu
         [Range(0.2f, 1f)] public float wristSizeMultiplier = 0.55f;
         [Tooltip("Fingertip transforms that can press world-space buttons (VR).")]
         public List<Transform> pokeTips = new List<Transform>();
+        [Tooltip("Click GUI window size relative to the panel's design size.")]
+        [Range(0.6f, 1.6f)] public float guiScale = 1.1f;
+        [Tooltip("Click GUI window centre, 0..1 of the screen. Remembered when you drag it.")]
+        public Vector2 guiPosition = new Vector2(0.5f, 0.5f);
 
         [Header("Content")]
         public BundleSourceMode sourceMode = BundleSourceMode.Dummy;
@@ -115,9 +119,16 @@ namespace BundleMenu
         private CursorLockMode savedLock;
         private bool savedVisible, cursorSaved;
         private DummyBundleSource dummySource;
+        private ClickGui gui;
+        private DesktopPointer pointer;
+        private readonly List<MenuButton> buttonCache = new List<MenuButton>();
+        private readonly List<MenuButton> overlayScratch = new List<MenuButton>();
+        private readonly List<MenuButton> worldScratch = new List<MenuButton>();
 
         private static readonly float[] Speeds = { 0.5f, 0.75f, 1f, 1.5f, 2f };
         private static readonly float[] FailRates = { 0f, 0.25f, 0.5f, 1f };
+        private static readonly float[] GuiSizes = { 0.8f, 1.1f, 1.4f };
+        private const int PrefsVersion = 2; // bump to drop saved values whose meaning changed
         private const string Prefs = "BundleMenu.";
 
         // ================================================================== lifecycle
@@ -145,6 +156,17 @@ namespace BundleMenu
             poker.Rig = Rig;
             poker.Root = host;
 
+            gui = new ClickGui(screenCanvas);
+            pointer = gameObject.AddComponent<DesktopPointer>();
+            pointer.OverlayButtons = OverlayButtons;
+            pointer.WorldButtons = WorldButtons;
+            pointer.Gui = () => placement == MenuPlacement.ClickGui && host.gameObject.activeSelf ? gui : null;
+            pointer.PanelHost = () => host;
+            pointer.WorldCamera = () => Rig.Camera;
+            pointer.WorldMouseEnabled = () => placement == MenuPlacement.Floating || placement == MenuPlacement.Wrist;
+            pointer.OnScroll = dir => { if (IsOpen) Page(dir); };
+            pointer.OnWindowDragged = pos => { guiPosition = pos; SavePrefs(); };
+
             CurrentTheme = ResolveTheme(theme);
             BuildView();
             pages.Push(new LibraryPage());
@@ -164,6 +186,7 @@ namespace BundleMenu
         {
             Service?.Dispose();
             if (worldCanvas != null) Destroy(worldCanvas.gameObject);
+            gui?.Dispose();
             if (simulatedWrist != null) Destroy(simulatedWrist.gameObject);
             RestoreCursor();
         }
@@ -234,6 +257,7 @@ namespace BundleMenu
         {
             Animator.StopEntrance();
             host.gameObject.SetActive(false);
+            gui?.Hide();
         }
 
         private void ApplyPanelProgress(float p, bool opening)
@@ -241,6 +265,21 @@ namespace BundleMenu
             if (view == null || view.Panel == null) return;
             // Ease out on the way in, ease in on the way out: both feel snappy at the "visible" end.
             float e = opening ? Ease.OutCubic(p) : p * p;
+
+            if (placement == MenuPlacement.ClickGui)
+            {
+                // The panel sits still inside the hidden render; the on-screen window does the moving.
+                view.Panel.anchoredPosition = Vector2.zero;
+                view.Panel.localScale = Vector3.one;
+                view.PanelGroup.alpha = 1f;
+                view.PanelGroup.interactable = opening && p > 0.5f;
+                float gs = Mathf.Lerp(0.9f, 1f, opening ? Ease.OutBack(p, 1.6f) : e);
+                gui.Window.localScale = new Vector3(gs, gs, 1f);
+                gui.Group.alpha = Mathf.Clamp01(e * 1.4f);
+                if (view.AccentLine != null)
+                    view.AccentLine.localScale = new Vector3(Ease.InOutCubic(Mathf.Clamp01(p * 1.3f - 0.3f)), 1f, 1f);
+                return;
+            }
 
             if (placement == MenuPlacement.ScreenRight)
             {
@@ -436,6 +475,24 @@ namespace BundleMenu
             if (IsOpen) Render(animate: true);
         }
 
+        public string GuiSizeName
+        {
+            get
+            {
+                int i = Array.FindIndex(GuiSizes, s => Mathf.Approximately(s, guiScale));
+                return i == 0 ? "Small" : i == 2 ? "Large" : i == 1 ? "Medium" : $"{guiScale:0.##}x";
+            }
+        }
+
+        public void CycleGuiSize(int dir)
+        {
+            int i = Array.FindIndex(GuiSizes, s => Mathf.Approximately(s, guiScale));
+            guiScale = GuiSizes[((i < 0 ? 1 : i) + dir + GuiSizes.Length) % GuiSizes.Length];
+            SavePrefs();
+            if (IsOpen && placement == MenuPlacement.ClickGui) ApplyPlacement();
+            dirty = true;
+        }
+
         public void ReplayEntrance()
         {
             if (!IsOpen) return;
@@ -544,7 +601,8 @@ namespace BundleMenu
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920, 1080);
             scaler.matchWidthOrHeight = 0.6f;
-            screenGo.AddComponent<GraphicRaycaster>();
+            // No GraphicRaycaster on purpose: DesktopPointer handles the mouse itself, so it works in games
+            // whose EventSystem ignores the mouse, and nothing can fire twice.
 
             // World canvas: hosts the panel in Floating / Wrist mode. Not parented to us so its pose is free.
             var worldGo = new GameObject("BundleMenu World", typeof(RectTransform));
@@ -552,7 +610,6 @@ namespace BundleMenu
             worldCanvas.renderMode = RenderMode.WorldSpace;
             worldCanvas.sortingOrder = 1000;
             worldGo.AddComponent<CanvasScaler>().dynamicPixelsPerUnit = 3f; // crisper text up close
-            worldGo.AddComponent<GraphicRaycaster>();
             ((RectTransform)worldGo.transform).sizeDelta = new Vector2(MenuView.Width, 700f);
             worldGo.SetActive(false);
 
@@ -579,6 +636,11 @@ namespace BundleMenu
             view.NextButton.OnClick = () => Page(+1);
 
             BuildToggleButton();
+            if (gui != null)
+            {
+                gui.ApplyTheme(CurrentTheme);
+                if (placement == MenuPlacement.ClickGui) ClickGui.SetLayerRecursively(worldCanvas.transform, gui.Layer);
+            }
         }
 
         private void BuildToggleButton()
@@ -612,8 +674,23 @@ namespace BundleMenu
                 host.anchorMin = host.anchorMax = new Vector2(1f, 0.5f);
                 host.pivot = new Vector2(1f, 0.5f);
                 host.anchoredPosition = new Vector2(-40f, 0f);
-                if (toggleButton != null) toggleButton.transform.SetAsLastSibling();
+                ClickGui.SetLayerRecursively(host, 5);
             }
+
+            if (placement == MenuPlacement.ClickGui)
+            {
+                // Park the real panel far off-map on its own layer; the hidden camera renders it into the window.
+                worldCanvas.transform.SetPositionAndRotation(ClickGui.HiddenOrigin, Quaternion.identity);
+                worldCanvas.worldCamera = gui.Camera;
+                ClickGui.SetLayerRecursively(worldCanvas.transform, gui.Layer);
+                gui.Show(worldCanvas.transform, host.sizeDelta, guiScale, guiPosition, CurrentTheme);
+            }
+            else
+            {
+                gui.Hide();
+                ClickGui.SetLayerRecursively(worldCanvas.transform, 5); // UI layer, drawn by the game camera
+            }
+            if (toggleButton != null) toggleButton.transform.SetAsLastSibling();
             host.localScale = Vector3.one;
             host.localRotation = Quaternion.identity;
             poker.Root = host;
@@ -621,7 +698,7 @@ namespace BundleMenu
 
         private void UpdateWorldPose(bool snap)
         {
-            if (placement == MenuPlacement.ScreenRight) return;
+            if (placement == MenuPlacement.ScreenRight || placement == MenuPlacement.ClickGui) return;
             var cam = Rig.Camera;
             if (cam == null) return;
             var camT = cam.transform;
@@ -667,6 +744,25 @@ namespace BundleMenu
 
         private bool following;
 
+        private IEnumerable<MenuButton> OverlayButtons()
+        {
+            buttonCache.Clear();
+            if (toggleButton != null) buttonCache.Add(toggleButton);
+            overlayScratch.Clear();
+            if (placement == MenuPlacement.ScreenRight && host.gameObject.activeSelf)
+                host.GetComponentsInChildren(false, overlayScratch);
+            buttonCache.AddRange(overlayScratch);
+            return buttonCache;
+        }
+
+        private IEnumerable<MenuButton> WorldButtons()
+        {
+            worldScratch.Clear();
+            if (placement != MenuPlacement.ScreenRight && host.gameObject.activeSelf)
+                host.GetComponentsInChildren(false, worldScratch);
+            return worldScratch;
+        }
+
         private static void EnsureEventSystem()
         {
             if (EventSystem.current != null || FindObjectOfType<EventSystem>() != null) return;
@@ -681,7 +777,8 @@ namespace BundleMenu
 
         private void GrabCursor()
         {
-            if (!unlockCursorWhileOpen || placement != MenuPlacement.ScreenRight && Rig.PokeTips.Count > 0) return;
+            bool desktop = placement == MenuPlacement.ScreenRight || placement == MenuPlacement.ClickGui;
+            if (!unlockCursorWhileOpen || (!desktop && Rig.PokeTips.Count > 0)) return;
             if (!cursorSaved)
             {
                 savedLock = Cursor.lockState;
@@ -707,7 +804,11 @@ namespace BundleMenu
             entrance = (EntranceStyle)PlayerPrefs.GetInt(Prefs + "entrance", (int)entrance);
             stagger = (StaggerMode)PlayerPrefs.GetInt(Prefs + "stagger", (int)stagger);
             animationSpeed = PlayerPrefs.GetFloat(Prefs + "speed", animationSpeed);
-            placement = (MenuPlacement)PlayerPrefs.GetInt(Prefs + "placement", (int)placement);
+            // Placement saved by older versions (which defaulted to Wrist in Gorilla Tag) is dropped once.
+            if (PlayerPrefs.GetInt(Prefs + "version", 1) >= PrefsVersion)
+                placement = (MenuPlacement)PlayerPrefs.GetInt(Prefs + "placement", (int)placement);
+            guiScale = PlayerPrefs.GetFloat(Prefs + "guiscale", guiScale);
+            guiPosition = new Vector2(PlayerPrefs.GetFloat(Prefs + "guix", guiPosition.x), PlayerPrefs.GetFloat(Prefs + "guiy", guiPosition.y));
             theme = (ThemePreset)PlayerPrefs.GetInt(Prefs + "theme", (int)theme);
             sourceMode = (BundleSourceMode)PlayerPrefs.GetInt(Prefs + "source", (int)sourceMode);
             dummyFailRate = PlayerPrefs.GetFloat(Prefs + "failrate", dummyFailRate);
@@ -730,6 +831,10 @@ namespace BundleMenu
             PlayerPrefs.SetInt(Prefs + "source", (int)sourceMode);
             PlayerPrefs.SetFloat(Prefs + "failrate", dummyFailRate);
             PlayerPrefs.SetInt(Prefs + "unloadall", unloadDestroysSpawned ? 1 : 0);
+            PlayerPrefs.SetFloat(Prefs + "guiscale", guiScale);
+            PlayerPrefs.SetFloat(Prefs + "guix", guiPosition.x);
+            PlayerPrefs.SetFloat(Prefs + "guiy", guiPosition.y);
+            PlayerPrefs.SetInt(Prefs + "version", PrefsVersion);
             PlayerPrefs.Save();
         }
     }

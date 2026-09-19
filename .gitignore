@@ -26,3 +26,8 @@ Injector/
 # The PRIVATE signing key must never be committed (it lives in %APPDATA%\AssetBay\signing)
 release-key.pem
 *.key
+
+# Worker backend: dependencies, local dev state, test seed
+backend/node_modules/
+backend/.wrangler/
+backend/test-seed/

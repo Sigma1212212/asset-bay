@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "serial": 1,
+  "announcement": "Welcome to Asset Bay! Broadcast screens are live.",
+  "screens": [
+    {
+      "id": "welcome-screen",
+      "title": "Welcome",
+      "video": "videos/welcome.mp4",
+      "scene": "",
+      "position": [0.0, 1.5, 3.0],
+      "rotationY": 180,
+      "width": 2.4,
+      "loop": true,
+      "volume": 0.4
+    }
+  ]
+}

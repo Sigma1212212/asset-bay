@@ -1,0 +1,13 @@
+name = "asset-bay"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+# Only /asset-bay/* on your domain goes to this Worker; the rest of the site is untouched.
+routes = [
+  { pattern = "randomthingsthatarecool.dev/asset-bay/*", zone_name = "randomthingsthatarecool.dev" }
+]
+
+# Videos, bundles and the signed feed live in this R2 bucket.
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "asset-bay-media"

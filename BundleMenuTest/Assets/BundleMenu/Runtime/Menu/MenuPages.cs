@@ -83,6 +83,19 @@ namespace BundleMenu
                 return rows;
             }
 
+            var news = ctx.Feed?.Current?.announcement;
+            if (!string.IsNullOrEmpty(news)) rows.Add(RowSpec.Message("news", news));
+
+            rows.Add(new RowSpec
+            {
+                Key = "videos",
+                Label = "Videos",
+                Value = ctx.Tablet.IsOpen ? "playing" : $"{ctx.Feed?.Current?.videos?.Length ?? 0}",
+                Light = ctx.Tablet.IsPlaying ? StatusLight.Ok : StatusLight.Idle,
+                ShowChevron = true,
+                OnClick = () => ctx.Navigate(new VideosPage()),
+            });
+
             foreach (string category in svc.Categories)
             {
                 var items = svc.InCategory(category).ToList();
@@ -216,6 +229,76 @@ namespace BundleMenu
                 rows.Add(RowSpec.Info("hint", "Load the bundle to see its assets"));
             }
             return rows;
+        }
+    }
+
+    /// <summary>Your uploaded videos, played on the tablet that pops out in front of you.</summary>
+    public sealed class VideosPage : MenuPage
+    {
+        private static readonly float[] Volumes = { 0f, 0.25f, 0.5f, 0.7f, 1f };
+        public override string Title => "Videos";
+
+        public override List<RowSpec> BuildRows(BundleMenuController ctx)
+        {
+            var feed = ctx.Feed;
+            var tablet = ctx.Tablet;
+            var rows = new List<RowSpec>();
+
+            if (tablet.IsOpen)
+            {
+                rows.Add(new RowSpec
+                {
+                    Key = "np", Label = tablet.IsPlaying ? "Pause" : "Play",
+                    Value = tablet.NowPlaying ?? "", IsOn = tablet.IsPlaying, Light = tablet.IsPlaying ? StatusLight.Ok : StatusLight.Idle,
+                    OnClick = () => { tablet.TogglePause(); ctx.RefreshNow(); },
+                });
+                rows.Add(new RowSpec { Key = "restart", Label = "Restart", OnClick = () => { tablet.Restart(); ctx.RefreshNow(); } });
+                rows.Add(new RowSpec
+                {
+                    Key = "vol", Label = "Volume", Value = $"{tablet.Volume * 100f:0}%",
+                    OnClick = () => { Step(tablet, +1); ctx.RefreshNow(); },
+                    OnAltClick = () => { Step(tablet, -1); ctx.RefreshNow(); },
+                });
+                rows.Add(new RowSpec { Key = "close", Label = "Put tablet away", Value = tablet.Source,
+                    OnClick = () => { tablet.Close(); ctx.RefreshNow(); } });
+            }
+
+            var videos = feed?.Current?.videos;
+            if (videos == null || videos.Length == 0)
+            {
+                rows.Add(RowSpec.Message("none", feed?.LastError != null
+                    ? "Couldn't load your library: " + feed.LastError
+                    : "No videos yet. Publish some with backend/publish-feed.ps1."));
+            }
+            else
+            {
+                foreach (var v in videos)
+                {
+                    var video = v;
+                    rows.Add(new RowSpec
+                    {
+                        Key = "v:" + video.id,
+                        Label = string.IsNullOrEmpty(video.title) ? video.id : video.title,
+                        Value = video.length ?? "",
+                        IsOn = tablet.IsOpen && tablet.NowPlaying == video.title,
+                        OnClick = () => { tablet.Play(feed.MediaUrl(video.video), video.title ?? video.id); ctx.RefreshNow(); },
+                    });
+                }
+            }
+
+            rows.Add(new RowSpec
+            {
+                Key = "refresh", Label = "Refresh library",
+                Value = feed?.LastUpdated != null ? feed.LastUpdated.Value.ToString("HH:mm") : "",
+                OnClick = () => ctx.RefreshFeedAsync().Forget(),
+            });
+            return rows;
+        }
+
+        private static void Step(VideoTablet tablet, int dir)
+        {
+            int i = System.Array.FindIndex(Volumes, v => UnityEngine.Mathf.Approximately(v, tablet.Volume));
+            tablet.SetVolume(Volumes[((i < 0 ? 3 : i) + dir + Volumes.Length) % Volumes.Length]);
         }
     }
 
@@ -370,6 +453,8 @@ namespace BundleMenu
 
             rows.Add(Cycle("unloadmode", "On unload", ctx.UnloadDestroysSpawned ? "destroy spawned" : "keep spawned",
                 ctx.ToggleUnloadMode, ctx.ToggleUnloadMode));
+            rows.Add(Cycle("screens", "Broadcast screens", ctx.BroadcastScreensOn ? "on" : "off",
+                ctx.ToggleBroadcastScreens, ctx.ToggleBroadcastScreens));
             rows.Add(new RowSpec { Key = "rescan", Label = "Rescan bundles", OnClick = ctx.Rescan });
             rows.Add(new RowSpec { Key = "clear", Label = "Clear spawned", Value = ctx.Spawner.Count.ToString(), OnClick = ctx.ClearSpawned });
             rows.Add(new RowSpec { Key = "unloadall", Label = "Unload everything", OnClick = ctx.UnloadEverything });

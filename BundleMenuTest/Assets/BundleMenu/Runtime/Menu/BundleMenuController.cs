@@ -67,6 +67,12 @@ namespace BundleMenu
         [Range(0.2f, 1f)] public float wristSizeMultiplier = 0.55f;
         [Tooltip("Fingertip transforms that can press world-space buttons (VR).")]
         public List<Transform> pokeTips = new List<Transform>();
+        [Header("Broadcasts")]
+        [Tooltip("Asset Bay backend (the Cloudflare Worker). Feed, videos and the tablet bundle come from here.")]
+        public string backendUrl = FeedClient.DefaultBaseUrl;
+        [Tooltip("Show video screens the feed places in the world. Off by default; players opt in.")]
+        public bool broadcastScreens;
+
         [Header("Gun")]
         [Tooltip("Desktop: hold this to aim (right mouse by default), left-click to fire. VR: right grip + trigger.")]
         public KeyCode gunAimKey = KeyCode.Mouse1;
@@ -95,6 +101,10 @@ namespace BundleMenu
         public GunLib Gun { get; private set; }
         public ModRunner Mods { get; private set; }
         public Checkpoint Checkpoint { get; } = new Checkpoint();
+        public FeedClient Feed { get; private set; }
+        public VideoTablet Tablet { get; private set; }
+        public BroadcastScreens Screens { get; private set; }
+        public bool BroadcastScreensOn => broadcastScreens;
         public MenuAnimator Animator { get; private set; }
         public MenuTheme CurrentTheme { get; private set; }
         public bool IsOpen => Animator != null && Animator.PanelTargetOpen;
@@ -215,6 +225,15 @@ namespace BundleMenu
                 ScreenCanvas = screenCanvas,
             });
             Mods.Changed += () => dirty = true;
+
+            Feed = new FeedClient(backendUrl);
+            Tablet = gameObject.AddComponent<VideoTablet>();
+            Tablet.ViewCamera = () => Rig.Camera;
+            Tablet.Theme = () => CurrentTheme;
+            Tablet.Report = message => { Toast(message, ToastKind.Info); dirty = true; };
+            Screens = gameObject.AddComponent<BroadcastScreens>();
+            Screens.ScreensEnabled = broadcastScreens;
+            Screens.ViewCamera = () => Rig.Camera;
             if (Mods.Available) Gun.Register(new GrappleMode(Mods.Context));
 
             CurrentTheme = ResolveTheme(theme);
@@ -229,6 +248,7 @@ namespace BundleMenu
         {
             if (Service == null) { enabled = false; return; } // Awake failed; its error is already in the log
             Service.RefreshCatalogAsync().Forget();
+            FeedLoop().Forget();
             if (startOpen) Open();
         }
 
@@ -584,6 +604,38 @@ namespace BundleMenu
         /// <summary>Re-render the current page in place (no entrance animation).</summary>
         public void RefreshNow() => dirty = true;
 
+        /// <summary>Checks the broadcast feed now and then every 5 minutes.</summary>
+        private async System.Threading.Tasks.Task FeedLoop()
+        {
+            while (this != null)
+            {
+                await RefreshFeedAsync();
+                await UnityAsync.Delay(300f);
+            }
+        }
+
+        public async System.Threading.Tasks.Task RefreshFeedAsync()
+        {
+            bool changed = await Feed.RefreshAsync();
+            if (this == null) return;
+            if (changed)
+            {
+                if (!string.IsNullOrEmpty(Feed.Current.announcement)) Toast(Feed.Current.announcement, ToastKind.Info);
+                Screens.Apply(Feed);
+                Tablet.UseBundleAsync(Feed).Forget();
+            }
+            dirty = true;
+        }
+
+        public void ToggleBroadcastScreens()
+        {
+            broadcastScreens = !broadcastScreens;
+            Screens.ScreensEnabled = broadcastScreens;
+            Screens.Apply(Feed);
+            SavePrefs();
+            dirty = true;
+        }
+
         public void ReplayEntrance()
         {
             if (!IsOpen) return;
@@ -918,6 +970,7 @@ namespace BundleMenu
                 placement = (MenuPlacement)PlayerPrefs.GetInt(Prefs + "placement", (int)placement);
             guiScale = PlayerPrefs.GetFloat(Prefs + "guiscale", guiScale);
             guiView = (GuiView)PlayerPrefs.GetInt(Prefs + "guiview", (int)guiView);
+            broadcastScreens = PlayerPrefs.GetInt(Prefs + "screens", broadcastScreens ? 1 : 0) == 1;
             if (!Enum.IsDefined(typeof(GuiView), guiView)) guiView = GuiView.Both;
             guiPosition = new Vector2(PlayerPrefs.GetFloat(Prefs + "guix", guiPosition.x), PlayerPrefs.GetFloat(Prefs + "guiy", guiPosition.y));
             theme = (ThemePreset)PlayerPrefs.GetInt(Prefs + "theme", (int)theme);
@@ -944,6 +997,7 @@ namespace BundleMenu
             PlayerPrefs.SetInt(Prefs + "unloadall", unloadDestroysSpawned ? 1 : 0);
             PlayerPrefs.SetFloat(Prefs + "guiscale", guiScale);
             PlayerPrefs.SetInt(Prefs + "guiview", (int)guiView);
+            PlayerPrefs.SetInt(Prefs + "screens", broadcastScreens ? 1 : 0);
             PlayerPrefs.SetFloat(Prefs + "guix", guiPosition.x);
             PlayerPrefs.SetFloat(Prefs + "guiy", guiPosition.y);
             PlayerPrefs.SetInt(Prefs + "version", PrefsVersion);

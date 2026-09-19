@@ -14,6 +14,8 @@ string keyPath = Environment.GetEnvironmentVariable("ASSETBAY_SIGNING_KEY") is {
     ? env
     : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AssetBay", "signing", "release-key.pem");
 
+string feedKeyPath = Path.Combine(Path.GetDirectoryName(keyPath)!, "feed-key.pem");
+
 if (args.Length == 0) return Usage();
 
 try
@@ -72,6 +74,42 @@ try
             return ok ? 0 : 1;
         }
 
+        // ---- feed signing (RSA-2048, PKCS#1 v1.5, SHA-256). The menu runs on the game's Mono runtime,
+        //      whose RSA support is solid; it verifies with the XML public key printed by feed-keygen.
+        case "feed-keygen":
+        {
+            if (File.Exists(feedKeyPath))
+            {
+                Console.Error.WriteLine($"A feed key already exists at {feedKeyPath}. Refusing to overwrite it.");
+                return 2;
+            }
+            using var rsa = RSA.Create(2048);
+            Directory.CreateDirectory(Path.GetDirectoryName(feedKeyPath)!);
+            File.WriteAllText(feedKeyPath, rsa.ExportPkcs8PrivateKeyPem());
+            Console.WriteLine($"Feed key written to {feedKeyPath}  (back it up; never commit it)");
+            Console.WriteLine(rsa.ToXmlString(false));
+            return 0;
+        }
+
+        case "feed-pubkey":
+        {
+            using var rsa = LoadFeedKey();
+            Console.WriteLine(rsa.ToXmlString(false));
+            return 0;
+        }
+
+        case "feed-sign" when args.Length >= 2:
+        {
+            using var rsa = LoadFeedKey();
+            byte[] data = File.ReadAllBytes(args[1]);
+            byte[] sig = rsa.SignData(data, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+            if (!rsa.VerifyData(data, sig, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1))
+                throw new CryptographicException("Self-check failed.");
+            File.WriteAllText(args[1] + ".sig", Convert.ToBase64String(sig));
+            Console.WriteLine($"Signed {Path.GetFileName(args[1])} -> {Path.GetFileName(args[1])}.sig");
+            return 0;
+        }
+
         default:
             return Usage();
     }
@@ -91,8 +129,17 @@ ECDsa LoadPrivate()
     return ecdsa;
 }
 
+RSA LoadFeedKey()
+{
+    if (!File.Exists(feedKeyPath))
+        throw new FileNotFoundException($"No feed key at {feedKeyPath}. Run 'feed-keygen' first (once).");
+    var rsa = RSA.Create();
+    rsa.ImportFromPem(File.ReadAllText(feedKeyPath));
+    return rsa;
+}
+
 static int Usage()
 {
-    Console.Error.WriteLine("usage: AssetBaySign keygen | pubkey | sign <file> | verify <file> [public-key.pem]");
+    Console.Error.WriteLine("usage: AssetBaySign keygen | pubkey | sign <file> | verify <file> [public-key.pem] | feed-keygen | feed-pubkey | feed-sign <file>");
     return 64;
 }

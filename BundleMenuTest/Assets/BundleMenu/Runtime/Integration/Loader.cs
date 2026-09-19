@@ -23,46 +23,86 @@ namespace BundleMenu
 
         public static void Inject()
         {
-            if (Interlocked.CompareExchange(ref started, 1, 0) != 0) return; // already injected
-            ejectRequested = false;
-            Canvas.willRenderCanvases += OnMainThread;
-            fallback = new Timer(_ => FallbackStart(), null, 5000, Timeout.Infinite);
+            Trace("Inject called");
+            try
+            {
+                if (Interlocked.CompareExchange(ref started, 1, 0) != 0) { Trace("already injected - ignored"); return; }
+                ejectRequested = false;
+
+                // 1. The guaranteed path first: a plain .NET timer (no Unity API involved, safe on any thread).
+                //    It uses the direct start that works from the injector thread, if the hook below hasn't fired.
+                fallback = new Timer(_ => FallbackStart(), null, 1500, Timeout.Infinite);
+                Trace("fallback timer armed");
+
+                // 2. The nicer path: build on Unity's main thread at the next canvas render. Optional - if touching
+                //    Unity's Canvas type from this thread fails in some game, the timer above still starts the menu.
+                try
+                {
+                    Canvas.willRenderCanvases += OnMainThread;
+                    Trace("main-thread hook armed");
+                }
+                catch (Exception e)
+                {
+                    Trace("main-thread hook unavailable: " + e.GetType().Name + " " + e.Message);
+                }
+            }
+            catch (Exception e)
+            {
+                Trace("Inject failed: " + e);
+                started = 0;
+            }
         }
 
         public static void Eject() => ejectRequested = true;
 
+        private static readonly object StartLock = new object();
+
         private static void OnMainThread()
         {
-            Canvas.willRenderCanvases -= OnMainThread;
-            fallback?.Dispose();
-            fallback = null;
-            if (bootstrap != null) return;
-            try
-            {
-                bootstrap = new GameObject("[BundleMenu]");
-                bootstrap.AddComponent<Bootstrap>();
-            }
-            catch (Exception e)
-            {
-                Debug.LogError("[BundleMenu] Inject failed: " + e);
-                started = 0;
-            }
+            try { Canvas.willRenderCanvases -= OnMainThread; } catch { }
+            StartBootstrap("main thread");
         }
 
         private static void FallbackStart()
         {
-            // Only reached when no canvas rendered for 5 s (no UI at all in the game).
-            if (bootstrap != null) return;
-            Canvas.willRenderCanvases -= OnMainThread;
+            try { Canvas.willRenderCanvases -= OnMainThread; } catch { }
+            StartBootstrap("fallback timer");
+        }
+
+        private static void StartBootstrap(string via)
+        {
+            lock (StartLock)
+            {
+                if (bootstrap != null) return;
+                try { fallback?.Dispose(); } catch { }
+                fallback = null;
+                try
+                {
+                    bootstrap = new GameObject("[BundleMenu]");
+                    bootstrap.AddComponent<Bootstrap>(); // no Awake work: the real setup happens in its Update
+                    Trace("bootstrap created via " + via);
+                }
+                catch (Exception e)
+                {
+                    Trace("bootstrap failed via " + via + ": " + e);
+                    bootstrap = null;
+                    started = 0;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Writes to %TEMP%\AssetBay-inject.log with plain file IO (works from any thread, even when Unity's
+        /// logger can't be used), so a failed injection always leaves a trail.
+        /// </summary>
+        internal static void Trace(string message)
+        {
             try
             {
-                bootstrap = new GameObject("[BundleMenu]");
-                bootstrap.AddComponent<Bootstrap>(); // no Awake work: the real setup still happens in Update
+                System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AssetBay-inject.log"),
+                    $"{DateTime.Now:HH:mm:ss.fff}  [{Thread.CurrentThread.ManagedThreadId}]  {message}{Environment.NewLine}");
             }
-            catch
-            {
-                started = 0;
-            }
+            catch { /* never let logging break injection */ }
         }
 
         /// <summary>Runs on the main thread. Builds the menu on its first frame, tears it all down on eject.</summary>
@@ -112,10 +152,12 @@ namespace BundleMenu
                     menu.placement = MenuInput.VRActive ? MenuPlacement.Wrist : MenuPlacement.ClickGui;
 
                     menuRoot.SetActive(true);
+                    Trace("menu built");
                     Debug.Log($"[BundleMenu] Loaded v{menu.versionLabel} ({(gtRig != null ? "Gorilla Tag rig" : "generic camera rig")}). Press Tab to open.");
                 }
                 catch (Exception e)
                 {
+                    Trace("menu failed to start: " + e);
                     Debug.LogError("[BundleMenu] Failed to start: " + e);
                     if (menuRoot != null) Destroy(menuRoot);
                     menuRoot = null;

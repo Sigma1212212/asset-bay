@@ -1,0 +1,13 @@
+{
+  "name": "asset-bay-backend",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Read-only Cloudflare Worker serving the signed Asset Bay broadcast feed and media from R2.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

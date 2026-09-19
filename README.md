@@ -6,6 +6,8 @@ An in-game menu for listing, loading, unloading and spawning Unity **AssetBundle
 - three placements: right side of the screen, floating in front of you, or on your wrist
 - a dummy mode, so you can test with no real bundles
 
+**Play it in Gorilla Tag:** download the launcher from [asset-bay-launcher releases](https://github.com/Sigma1212212/asset-bay-launcher/releases/latest). Start the game, run `AssetBayLauncher.exe`, click **Inject latest**, then press Tab in game.
+
 | folder | what |
 |---|---|
 | `BundleMenuTest/Assets/BundleMenu/` | **The deliverable.** Copy this folder into any Unity 2021.3+ project. |

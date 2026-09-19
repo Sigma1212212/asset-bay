@@ -71,6 +71,8 @@ namespace BundleMenu
         [Tooltip("Menu type used when the player's Menu type setting is 'Match theme'.")]
         public MenuStyle Style = MenuStyle.Classic;
         public PanelPattern Pattern = PanelPattern.None;
+        [Tooltip("Where each piece goes when Style is Custom (made in the launcher's Designer).")]
+        public CustomLayoutData Custom;
         [Tooltip("Panel thickness in UI units: the visible edge under the panel, and the 3D slab behind it in the world.")]
         [Range(0, 32)] public float Depth = 12f;
         [Tooltip("How far buttons stand off their base; they travel down this far when pressed.")]

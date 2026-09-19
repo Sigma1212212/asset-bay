@@ -15,6 +15,7 @@ namespace BundleMenu
         Cards,       // compact cards with chevrons, pill pager in a bottom dock
         Book,        // wide two-page spread with a spine; rows fill left page then right
         Signboard,   // hanging sign on ropes from a beam, controls in a row underneath
+        Custom,      // laid out by hand in the launcher's Designer (see CustomLayoutData)
     }
 
     /// <summary>What one row looks like inside a style.</summary>
@@ -44,6 +45,7 @@ namespace BundleMenu
                 case MenuStyle.Cards: return "Cards";
                 case MenuStyle.Book: return "Book";
                 case MenuStyle.Signboard: return "Signboard";
+                case MenuStyle.Custom: return "Custom";
                 default: return "Classic";
             }
         }
@@ -59,6 +61,7 @@ namespace BundleMenu
                 case MenuStyle.Cards: return new CardsLayout();
                 case MenuStyle.Book: return new BookLayout();
                 case MenuStyle.Signboard: return new SignboardLayout();
+                case MenuStyle.Custom: return new CustomLayout();
                 default: return new ClassicLayout();
             }
         }

@@ -17,8 +17,11 @@ namespace BundleMenu.Editor
                 Debug.Log($"DESIGNED: \"{t.DisplayName}\" style={t.Style} depth={t.Depth} buttonDepth={t.ButtonDepth} bevel={t.Bevel} radius={t.PanelRadius}");
             if (ThemePresets.PackThemes.Count == 0) { Debug.Log("DESIGNED: nothing to render"); return; }
 
-            var theme = ThemePresets.PackThemes[0];
-            ThemePreview.RenderOne(theme, theme.Style, $"{TabletPreview.OutputFolder}/designed.png");
+            foreach (var theme in ThemePresets.PackThemes)
+            {
+                string safe = theme.DisplayName.Replace(" ", "_");
+                ThemePreview.RenderOne(theme, theme.Style, $"{TabletPreview.OutputFolder}/designed_{safe}.png");
+            }
             Debug.Log("DESIGNED: done");
         }
     }

@@ -115,6 +115,18 @@ namespace BundleMenu
                 });
             }
 
+            if (ctx.Presence != null)
+                rows.Add(new RowSpec
+                {
+                    Key = "players", Label = "Players", Value = ctx.Presence.Roster.Count.ToString(),
+                    ShowChevron = true, OnClick = () => ctx.Navigate(new PlayersPage()),
+                });
+            if (!ctx.IsAdmin)
+            {
+                rows.Add(new RowSpec { Key = "mode", Label = "Admin menu", Value = ctx.PinSet ? "locked" : "off",
+                    Light = StatusLight.Idle, OnClick = () => ctx.SetMode(MenuMode.Admin) });
+                return rows;
+            }
             rows.Add(new RowSpec
             {
                 Key = "mods",
@@ -375,12 +387,63 @@ namespace BundleMenu
     }
 
     /// <summary>Movement mods for your own player, plus the lobby they're allowed in.</summary>
+    /// <summary>Everyone in the room, and the tag you've pinned on each of them (only you see those).</summary>
+    public sealed class PlayersPage : MenuPage
+    {
+        public override string Title => "Players";
+
+        public override List<RowSpec> BuildRows(BundleMenuController ctx)
+        {
+            var rows = new List<RowSpec>();
+            var presence = ctx.Presence;
+            if (presence == null) { rows.Add(RowSpec.Info("none", "Gorilla Tag only")); return rows; }
+
+            rows.Add(Cycle("mytag", "My tag", string.IsNullOrEmpty(TagStore.MyTag) ? "off" : TagStore.MyTag,
+                () => ctx.CycleMyTag(+1), () => ctx.CycleMyTag(-1)));
+            rows.Add(Cycle("mytagc", "My tag colour", TagStore.ColourName(TagStore.MyColourHex),
+                () => ctx.CycleMyTagColour(+1), () => ctx.CycleMyTagColour(-1)));
+            rows.Add(Cycle("tagson", "Show tags", ctx.TagsOn ? "on" : "off", ctx.ToggleTags, ctx.ToggleTags));
+
+            if (presence.Roster.Count == 0) rows.Add(RowSpec.Info("empty", "Nobody else here"));
+            foreach (var player in presence.Roster)
+            {
+                var p = player;
+                var state = presence.StateFor(p);
+                string mine = TagStore.LocalTag(p.UserId);
+                string shown = mine ?? (string.IsNullOrEmpty(state?.tag) ? null : state.tag + " (theirs)");
+                rows.Add(new RowSpec
+                {
+                    Key = "p:" + p.Name,
+                    Label = p.Name,
+                    Value = shown ?? (state != null ? "asset bay" : ""),
+                    Light = state == null ? StatusLight.None : state.open ? StatusLight.Ok : StatusLight.Idle,
+                    IsOn = mine != null,
+                    // Left click steps through the tags, right click steps back; the side button changes colour.
+                    OnClick = () => { TagStore.CycleLocalTag(p.UserId, +1); ctx.RefreshNow(); },
+                    OnAltClick = () => { TagStore.CycleLocalTag(p.UserId, -1); ctx.RefreshNow(); },
+                    OnSecondary = mine == null ? (Action)null : () => { TagStore.CycleLocalColour(p.UserId, +1); ctx.RefreshNow(); },
+                    SecondaryIcon = Icon.Dot,
+                });
+            }
+            if (TagStore.LocalCount > 0)
+                rows.Add(new RowSpec { Key = "clear", Label = "Clear my tags", Value = TagStore.LocalCount.ToString(),
+                    OnClick = () => { TagStore.ClearLocal(); ctx.RefreshNow(); } });
+            return rows;
+        }
+
+        private static RowSpec Cycle(string key, string label, string value, Action next, Action prev) =>
+            new RowSpec { Key = key, Label = label, Value = value, OnClick = next, OnAltClick = prev ?? next };
+    }
+
     public sealed class ModsPage : MenuPage
     {
         public override string Title => "Mods";
 
         public override List<RowSpec> BuildRows(BundleMenuController ctx)
         {
+            // The normal menu doesn't include this page; if it's still on the stack, stop here.
+            if (!ctx.IsAdmin) return new List<RowSpec> { RowSpec.Info("locked", "Admin menu only") };
+
             var runner = ctx.Mods;
             var rows = new List<RowSpec>();
 
@@ -460,6 +523,9 @@ namespace BundleMenu
 
         public override List<RowSpec> BuildRows(BundleMenuController ctx)
         {
+            // The normal menu doesn't include this page; if it's still on the stack, stop here.
+            if (!ctx.IsAdmin) return new List<RowSpec> { RowSpec.Info("locked", "Admin menu only") };
+
             var gun = ctx.Gun;
             var mode = gun.Mode;
             var rows = new List<RowSpec>
@@ -515,17 +581,17 @@ namespace BundleMenu
                     () => ctx.CycleTheme(+1), () => ctx.CycleTheme(-1)),
                 Cycle("menutype", "Menu type", ctx.MenuStyleName,
                     () => ctx.CycleMenuStyle(+1), () => ctx.CycleMenuStyle(-1)),
-                Cycle("source", "Bundle source", ctx.SourceMode.ToString(),
+                !ctx.IsAdmin ? null : Cycle("source", "Bundle source", ctx.SourceMode.ToString(),
                     () => ctx.SetSource(ctx.SourceMode == BundleSourceMode.Dummy ? BundleSourceMode.Local : BundleSourceMode.Dummy), null),
             };
 
             rows.RemoveAll(r => r == null);
 
-            if (ctx.SourceMode == BundleSourceMode.Dummy)
+            if (ctx.IsAdmin && ctx.SourceMode == BundleSourceMode.Dummy)
                 rows.Add(Cycle("fail", "Dummy fail rate", $"{ctx.DummyFailRate * 100f:0}%",
                     () => ctx.CycleFailRate(+1), () => ctx.CycleFailRate(-1)));
 
-            rows.Add(Cycle("unloadmode", "On unload", ctx.UnloadDestroysSpawned ? "destroy spawned" : "keep spawned",
+            if (ctx.IsAdmin) rows.Add(Cycle("unloadmode", "On unload", ctx.UnloadDestroysSpawned ? "destroy spawned" : "keep spawned",
                 ctx.ToggleUnloadMode, ctx.ToggleUnloadMode));
             rows.Add(Cycle("screens", "Broadcast screens", ctx.BroadcastScreensOn ? "on" : "off",
                 ctx.ToggleBroadcastScreens, ctx.ToggleBroadcastScreens));
@@ -544,6 +610,16 @@ namespace BundleMenu
                     OnClick = ctx.ToggleMenuSharing, OnAltClick = ctx.ToggleMenuSharing,
                 });
             rows.Add(RowSpec.Info("safe", "Safe mode + sync code", $"press {ctx.Safe?.Key.ToString() ?? "H"}"));
+            rows.Add(Cycle("mytag", "My tag", string.IsNullOrEmpty(TagStore.MyTag) ? "off" : TagStore.MyTag,
+                () => ctx.CycleMyTag(+1), () => ctx.CycleMyTag(-1)));
+            if (!string.IsNullOrEmpty(TagStore.MyTag))
+                rows.Add(Cycle("mytagc", "Tag colour", TagStore.ColourName(TagStore.MyColourHex),
+                    () => ctx.CycleMyTagColour(+1), () => ctx.CycleMyTagColour(-1)));
+            rows.Add(Cycle("tagson", "Show tags", ctx.TagsOn ? "on" : "off", ctx.ToggleTags, ctx.ToggleTags));
+            rows.Add(Cycle("mode", "Menu", ctx.IsAdmin ? "admin" : "normal",
+                () => ctx.ToggleMode(), () => ctx.ToggleMode()));
+            if (!ctx.IsAdmin) return rows;
+
             rows.Add(new RowSpec { Key = "rescan", Label = "Rescan bundles", OnClick = ctx.Rescan });
             rows.Add(new RowSpec { Key = "clear", Label = "Clear spawned", Value = ctx.Spawner.Count.ToString(), OnClick = ctx.ClearSpawned });
             rows.Add(new RowSpec { Key = "unloadall", Label = "Unload everything", OnClick = ctx.UnloadEverything });

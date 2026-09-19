@@ -15,8 +15,8 @@ namespace BundleMenu
 
         public bool Visible { get; private set; }
 
-        private enum Tab { Menu, Sync, Online, Tablet, Tools, Info }
-        private static readonly string[] TabNames = { "menu", "sync", "online", "tablet", "tools", "info" };
+        private enum Tab { Menu, Sync, Online, Tablet, Admin, Tools, Info }
+        private static readonly string[] TabNames = { "menu", "sync", "online", "tablet", "admin", "tools", "info" };
         private Tab tab;
         private Rect window = new Rect(80, 80, 680, 520);
         private CursorLockMode savedLock;
@@ -80,6 +80,7 @@ namespace BundleMenu
                     case Tab.Sync: DrawSyncTab(); break;
                     case Tab.Online: DrawOnlineTab(); break;
                     case Tab.Tablet: DrawTabletTab(); break;
+                    case Tab.Admin: DrawAdminTab(); break;
                     case Tab.Tools: DrawToolsTab(); break;
                     default: DrawInfoTab(); break;
                 }

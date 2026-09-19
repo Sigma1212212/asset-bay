@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -28,6 +27,11 @@ namespace BundleMenu
         public bool ControllableVisible { get; private set; }
 
         private readonly Dictionary<Transform, Card> cards = new Dictionary<Transform, Card>();
+        private readonly HashSet<Transform> seen = new HashSet<Transform>();
+        private readonly List<Transform> dropped = new List<Transform>();
+
+        /// <summary>Stop drawing menus further away than this (metres).</summary>
+        public float MaxDistance = 30f;
 
         private const float W = 300f, RowH = 34f, Gap = 5f, Pad = 12f;
 
@@ -38,34 +42,54 @@ namespace BundleMenu
             public Image Background, Rim, Dot;
             public TextMeshProUGUI Title, Detail;
             public float Open;
-            public string Signature;
+            public MenuState Shown;   // the state object the mirror was built from (compared by reference)
             public MenuTheme Look;
             public readonly List<MenuButton> Buttons = new List<MenuButton>();
         }
 
+        // Runs every frame so the panels track their owner smoothly. The per-frame work is deliberately
+        // tiny: move a transform, and only touch the contents when that player's menu actually changed.
         private void LateUpdate()
         {
             var cam = ViewCamera?.Invoke();
-            var seen = new HashSet<Transform>();
+            seen.Clear();
             Buttons.Clear();
             ControllableVisible = false;
 
             if (Presence != null && cam != null)
             {
-                foreach (var (player, state) in Presence.Others)
+                var camPos = cam.transform.position;
+                var others = Presence.Others;
+                for (int i = 0; i < others.Count; i++)
                 {
+                    var (player, state) = others[i];
                     if (player.Body == null) continue;
                     seen.Add(player.Body);
-                    if (!cards.TryGetValue(player.Body, out var card)) cards[player.Body] = card = Create();
+
+                    // Too far away, or behind you: keep the card but stop doing anything with it.
+                    var toPlayer = player.Body.position - camPos;
+                    bool near = toPlayer.sqrMagnitude < MaxDistance * MaxDistance;
+                    if (!cards.TryGetValue(player.Body, out var card))
+                    {
+                        if (!near) continue;               // don't even build it until they're close
+                        cards[player.Body] = card = Create();
+                    }
+                    if (!near)
+                    {
+                        if (card.Root.activeSelf) card.Root.SetActive(false);
+                        continue;
+                    }
+                    if (!card.Root.activeSelf) card.Root.SetActive(true);
                     Apply(card, player, state, cam);
                 }
             }
 
-            foreach (var body in new List<Transform>(cards.Keys))
+            dropped.Clear();
+            foreach (var body in cards.Keys) if (body == null || !seen.Contains(body)) dropped.Add(body);
+            for (int i = 0; i < dropped.Count; i++)
             {
-                if (seen.Contains(body) && body != null) continue;
-                Destroy(cards[body].Root);
-                cards.Remove(body);
+                Destroy(cards[dropped[i]].Root);
+                cards.Remove(dropped[i]);
             }
         }
 
@@ -136,11 +160,10 @@ namespace BundleMenu
                 : string.IsNullOrEmpty(state.video) ? $"{player.Name} · {state.theme}" + (string.IsNullOrEmpty(state.style) ? "" : $" / {state.style}")
                 : $"Playing: {state.video}";
 
-            // Mirror: rebuild only when what's on their screen changed.
-            string sig = controllable ? Signature(state) : "";
-            if (sig != card.Signature)
+            // Mirror: rebuilt only when a new state arrives for them (the link replaces the object).
+            if (!ReferenceEquals(card.Shown, state))
             {
-                card.Signature = sig;
+                card.Shown = state;
                 BuildMirror(card, player, state, accent, panel);
             }
             if (controllable && card.Open > 0.5f)
@@ -153,13 +176,6 @@ namespace BundleMenu
             float pulse = 0.75f + 0.25f * Mathf.Sin(Time.unscaledTime * 3f);
             card.Dot.color = new Color(accent.r, accent.g, accent.b, (1f - card.Open) * pulse);
             card.Dot.rectTransform.anchoredPosition = new Vector2(0f, 60f);
-        }
-
-        private static string Signature(MenuState s)
-        {
-            var sb = new StringBuilder().Append(s.open).Append('|').Append(s.page).Append('|').Append(s.pg).Append('|').Append(s.control);
-            if (s.rows != null) foreach (var r in s.rows) sb.Append('|').Append(r.k).Append(r.l).Append(r.v).Append(r.on).Append(r.nav);
-            return sb.ToString();
         }
 
         private void BuildMirror(Card card, GorillaTagPlayer.OtherPlayer player, MenuState state, Color accent, Color panel)

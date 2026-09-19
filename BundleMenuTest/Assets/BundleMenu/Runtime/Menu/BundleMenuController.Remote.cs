@@ -46,6 +46,7 @@ namespace BundleMenu
         public void SetRemoteControl(ControlLevel level)
         {
             RemoteControl = level;
+            Presence?.TouchState();
             Toast(level switch
             {
                 ControlLevel.Browse => "Others here can browse your menu and use your tablet. Resets when the game restarts.",
@@ -69,6 +70,7 @@ namespace BundleMenu
         {
             lastSlice = slice;
             lastPaging = count > 1 ? $"{page.PageIndex + 1}/{count}" : "";
+            Presence?.TouchState(); // others mirroring this menu see the new page at once
         }
 
         private MirrorRow[] MirrorRows()

@@ -170,6 +170,7 @@ namespace BundleMenu
         private void Awake()
         {
             CaptureDefaults();
+            LoadMode();
             if (rememberSettings) { LoadPrefs(); LoadSavedAt(); }
 
             Animator = gameObject.AddComponent<MenuAnimator>();
@@ -267,6 +268,7 @@ namespace BundleMenu
                 Remote.Theme = () => CurrentTheme;
                 Remote.Report = message => Toast(message, ToastKind.Info);
                 SetupRemoteControl();
+                SetupTags();
                 poker.ExtraButtons = () => Remote.Buttons;
                 pointer.RemoteButtons = () => Remote.Buttons;
             }
@@ -358,6 +360,7 @@ namespace BundleMenu
             ApplyPlacement();
             UpdateWorldPose(snap: true);
             Animator.SetPanelOpen(true);
+            Presence?.TouchState();
             Render(animate: true, delay: 0.06f);
             GrabCursor();
             OpenChanged?.Invoke(true);
@@ -367,6 +370,7 @@ namespace BundleMenu
         {
             if (!IsOpen) return;
             Animator.SetPanelOpen(false);
+            Presence?.TouchState();
             if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
             RestoreCursor();
             OpenChanged?.Invoke(false);
@@ -790,6 +794,8 @@ namespace BundleMenu
                 page = IsOpen && pages.Count > 0 ? Clip(pages.Peek().Title, 40) : null,
                 video = Tablet != null && Tablet.IsPlaying ? Clip(Tablet.NowPlaying, 48) : null,
                 control = RemoteControl == ControlLevel.Full ? "full" : RemoteControl == ControlLevel.Browse ? "browse" : "off",
+                tag = TagStore.MyTag,
+                tagc = string.IsNullOrEmpty(TagStore.MyTag) ? null : TagStore.MyColourHex,
                 pg = lastPaging,
                 rows = MirrorRows(),
             };

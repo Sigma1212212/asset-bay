@@ -20,6 +20,8 @@ namespace BundleMenu
         public string page;
         public string video;
         public string control;     // "off" / "browse" / "full": may others press buttons on this menu
+        public string tag;         // the trait shown above this player ("ADMIN", "DEV", ...)
+        public string tagc;        // its colour, "#RRGGBB"
         public string pg;          // "1/3" page counter of the mirror
         public MirrorRow[] rows;   // the visible rows, so others can show (and press) a copy
     }
@@ -58,11 +60,24 @@ namespace BundleMenu
         public GorillaTagPlayer Player;
         public Func<MenuState> LocalState;
 
+        /// <summary>Everyone in the room (Asset Bay or not), refreshed with the member list.</summary>
+        public readonly List<GorillaTagPlayer.OtherPlayer> Roster = new List<GorillaTagPlayer.OtherPlayer>();
+
+        /// <summary>What this player's menu is sharing, or null if they don't run Asset Bay.</summary>
+        public MenuState StateFor(GorillaTagPlayer.OtherPlayer p)
+        {
+            string h = HashFor(p);
+            return h != null && liveMembers.TryGetValue(h, out var m) ? m.state : null;
+        }
+
         /// <summary>Other players in this room who run Asset Bay, keyed to their rig.</summary>
         public readonly List<(GorillaTagPlayer.OtherPlayer player, MenuState state)> Others =
             new List<(GorillaTagPlayer.OtherPlayer, MenuState)>();
 
         public string LastError { get; private set; }
+
+        /// <summary>The menu changed: share it now (rate limited). Cheaper than checking every frame.</summary>
+        public void TouchState() => stateDirty = true;
         public event Action Changed;
 
         private float nextPost;
@@ -76,7 +91,8 @@ namespace BundleMenu
         private LiveLink link;
         private string linkRoom;
         private int liveFailures;
-        private float liveRetryAt, nextIdentity, nextStateCheck, lastSentAt, nextRebuild;
+        private float liveRetryAt, nextIdentity, lastSentAt, nextRebuild;
+        private bool stateDirty = true;
         private string roomHash, playerHash, room, lastSentJson;
         private bool membersDirty;
         private readonly Dictionary<string, (MenuState state, float seen)> liveMembers = new Dictionary<string, (MenuState, float)>();
@@ -223,11 +239,11 @@ namespace BundleMenu
                 }
             }
 
-            // Our state: checked 4x a second, sent only when it changed (or every 10 s so others know we're here).
-            if (now >= nextStateCheck)
+            // Our state goes out when the menu says it changed (at most 5x a second), plus a 10 s "still here".
+            if ((stateDirty && now - lastSentAt >= 0.2f) || now - lastSentAt > 10f)
             {
-                nextStateCheck = now + 0.25f;
                 string json = JsonUtility.ToJson(LocalState?.Invoke() ?? new MenuState());
+                stateDirty = false;
                 if (json != lastSentJson || now - lastSentAt > 10f)
                 {
                     link.Send($"{{\"t\":\"state\",\"state\":{json}}}");
@@ -244,11 +260,15 @@ namespace BundleMenu
             // Match hashes to the rigs around us (also re-run each second: players join and leave the lobby).
             if (membersDirty || now >= nextRebuild)
             {
+                // Finding rigs means a scene scan, so it's rare unless someone just joined or left.
+                nextRebuild = now + (membersDirty ? 0.5f : 3f);
                 membersDirty = false;
-                nextRebuild = now + 1f;
                 Others.Clear();
-                foreach (var p in Player.OtherPlayers())
+                Roster.Clear();
+                Roster.AddRange(Player.OtherPlayers());
+                for (int i = 0; i < Roster.Count; i++)
                 {
+                    var p = Roster[i];
                     string h = HashFor(p);
                     if (h != null && liveMembers.TryGetValue(h, out var m) && m.state != null) Others.Add((p, m.state));
                 }

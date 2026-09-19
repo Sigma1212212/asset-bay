@@ -631,6 +631,11 @@ namespace BundleMenu
                 () => ctx.ToggleMode(), () => ctx.ToggleMode()));
             if (!ctx.IsAdmin) return rows;
 
+            rows.Add(new RowSpec
+            {
+                Key = "reloadthemes", Label = "Reload my themes", Value = ThemeFolder.Count > 0 ? ThemeFolder.Count + " custom" : "designer",
+                OnClick = () => { int n = ThemeFolder.Reload(); ctx.Toast(n > 0 ? $"{n} themes loaded from your themes folder" : "No custom themes yet - design one in the launcher", ToastKind.Info); ctx.RefreshNow(); },
+            });
             rows.Add(new RowSpec { Key = "rescan", Label = "Rescan bundles", OnClick = ctx.Rescan });
             rows.Add(new RowSpec { Key = "clear", Label = "Clear spawned", Value = ctx.Spawner.Count.ToString(), OnClick = ctx.ClearSpawned });
             rows.Add(new RowSpec { Key = "unloadall", Label = "Unload everything", OnClick = ctx.UnloadEverything });

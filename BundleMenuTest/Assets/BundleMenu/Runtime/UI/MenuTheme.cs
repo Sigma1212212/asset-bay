@@ -77,6 +77,10 @@ namespace BundleMenu
         [Range(0, 10)] public float ButtonDepth = 6f;
         [Tooltip("How strongly buttons are lit like physical keys (top light, bottom shade, edge highlight). 0 = flat.")]
         [Range(0, 1)] public float Bevel = 1f;
+        [Tooltip("Light falling on the top of each key.")]
+        [Range(0, 2)] public float BevelLight = 1f;
+        [Tooltip("Shade under each key.")]
+        [Range(0, 2)] public float BevelShadow = 1f;
         public Color PatternColor = new Color(1, 1, 1, 0.06f);
 
         [Header("Status lights")]

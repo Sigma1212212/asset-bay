@@ -89,6 +89,19 @@ namespace BundleMenu.Editor
             UnityEngine.Object.DestroyImmediate(root);
         }
 
+        /// <summary>Render one theme to a file (used by the designed-theme check).</summary>
+        public static void RenderOne(MenuTheme theme, MenuStyle style, string path)
+        {
+            UnityEditor.SceneManagement.EditorSceneManager.NewScene(UnityEditor.SceneManagement.NewSceneSetup.EmptyScene,
+                UnityEditor.SceneManagement.NewSceneMode.Single);
+            System.IO.Directory.CreateDirectory(TabletPreview.OutputFolder);
+            var cam = new GameObject("Camera").AddComponent<Camera>();
+            cam.clearFlags = CameraClearFlags.SolidColor;
+            cam.backgroundColor = new Color(0.12f, 0.13f, 0.17f);
+            cam.orthographic = true;
+            Render(cam, theme, style, path);
+        }
+
         private static void Render(Camera cam, MenuTheme theme, MenuStyle style, string path)
         {
             var canvasGo = new GameObject("Canvas", typeof(RectTransform));

@@ -275,6 +275,7 @@ namespace BundleMenu
 
             SetupSync();
 
+            ThemeFolder.Reload();   // themes designed in the launcher
             CurrentTheme = ResolveTheme(theme);
             BuildView();
             pages.Push(new LibraryPage());

@@ -16,12 +16,13 @@ namespace BundleMenu
             float k = t.Bevel * strength;
             if (k <= 0f) return;
 
+            float lightK = Mathf.Clamp01(k * t.BevelLight), shadeK = Mathf.Clamp01(k * t.BevelShadow);
             var sheen = UIFactory.Image(body, "Sheen", UISprites.RoundedFill(radius), Color.white);
             sheen.rectTransform.anchorMin = new Vector2(0f, 0.4f);
             sheen.rectTransform.anchorMax = Vector2.one;
             sheen.rectTransform.offsetMin = new Vector2(1f, 0f);
             sheen.rectTransform.offsetMax = new Vector2(-1f, -1f);
-            sheen.gameObject.AddComponent<UIGradient>().Set(new Color(1, 1, 1, 0.20f * k), new Color(1, 1, 1, 0f));
+            sheen.gameObject.AddComponent<UIGradient>().Set(new Color(1, 1, 1, 0.20f * lightK), new Color(1, 1, 1, 0f));
             sheen.transform.SetSiblingIndex(0);
 
             var shade = UIFactory.Image(body, "Shade", UISprites.RoundedFill(radius), Color.white);
@@ -29,10 +30,10 @@ namespace BundleMenu
             shade.rectTransform.anchorMax = new Vector2(1f, 0.5f);
             shade.rectTransform.offsetMin = new Vector2(1f, 1f);
             shade.rectTransform.offsetMax = new Vector2(-1f, 0f);
-            shade.gameObject.AddComponent<UIGradient>().Set(new Color(0, 0, 0, 0f), new Color(0, 0, 0, 0.22f * k));
+            shade.gameObject.AddComponent<UIGradient>().Set(new Color(0, 0, 0, 0f), new Color(0, 0, 0, 0.22f * shadeK));
             shade.transform.SetSiblingIndex(1);
 
-            var line = UIFactory.Image(body, "Highlight", UISprites.RoundedFill(1f), new Color(1, 1, 1, 0.32f * k));
+            var line = UIFactory.Image(body, "Highlight", UISprites.RoundedFill(1f), new Color(1, 1, 1, 0.32f * lightK));
             line.rectTransform.anchorMin = new Vector2(0f, 1f);
             line.rectTransform.anchorMax = Vector2.one;
             float inset = Mathf.Max(4f, radius * 0.7f);

@@ -101,6 +101,16 @@ namespace BundleMenu
                     OnClick = () => ctx.Navigate(new CategoryPage(cat)),
                 });
             }
+
+            rows.Add(new RowSpec
+            {
+                Key = "gun",
+                Label = "Gun",
+                Value = ctx.Gun.GunEnabled ? ctx.Gun.Mode?.Name ?? "on" : "off",
+                Light = ctx.Gun.GunEnabled ? StatusLight.Ok : StatusLight.Idle,
+                ShowChevron = true,
+                OnClick = () => ctx.Navigate(new GunPage()),
+            });
             return rows;
         }
     }
@@ -194,6 +204,39 @@ namespace BundleMenu
             {
                 rows.Add(RowSpec.Info("hint", "Load the bundle to see its assets"));
             }
+            return rows;
+        }
+    }
+
+    /// <summary>The gun: on/off, mode, and a live readout of what it's pointing at.</summary>
+    public sealed class GunPage : MenuPage
+    {
+        public override string Title => "Gun";
+
+        public override List<RowSpec> BuildRows(BundleMenuController ctx)
+        {
+            var gun = ctx.Gun;
+            var mode = gun.Mode;
+            var rows = new List<RowSpec>
+            {
+                new RowSpec
+                {
+                    Key = "enabled", Label = "Gun", Value = gun.GunEnabled ? "on" : "off", IsOn = gun.GunEnabled,
+                    Light = gun.GunEnabled ? StatusLight.Ok : StatusLight.Idle,
+                    OnClick = () => { gun.GunEnabled = !gun.GunEnabled; ctx.Toast(gun.GunEnabled ? "Gun on" : "Gun off", ToastKind.Info); ctx.RefreshNow(); },
+                },
+                new RowSpec
+                {
+                    Key = "mode", Label = "Mode", Value = mode?.Name ?? "-",
+                    OnClick = () => { gun.CycleMode(+1); ctx.RefreshNow(); },
+                    OnAltClick = () => { gun.CycleMode(-1); ctx.RefreshNow(); },
+                },
+                RowSpec.Info("target", gun.Aiming ? "Aiming" : "Target",
+                    gun.Aiming && mode != null ? mode.Describe(gun.Current) : mode?.Describe(default) ?? ""),
+                RowSpec.Message("how", MenuInput.VRActive
+                    ? "Hold the right grip to aim, pull the right trigger to fire."
+                    : "Hold right mouse to aim, left-click to fire. Doesn't fire while the cursor is on the menu."),
+            };
             return rows;
         }
     }

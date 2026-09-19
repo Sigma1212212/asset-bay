@@ -50,6 +50,7 @@ There are three layers, and dependencies point one way only. The UI never touche
 | `Menu/BundleMenuController.cs` | The one component you add. Wires everything together. |
 | `Menu/ClickGui.cs` | Desktop "click GUI": the real world-space panel is parked off-map on its own layer, a hidden camera renders it into a draggable on-screen window, and clicks are mapped back onto it. |
 | `Menu/DesktopPointer.cs` | All mouse input, read directly instead of through the EventSystem (works in games like Gorilla Tag whose EventSystem is VR-only). Hover, press, click, scroll-to-page, window dragging. |
+| `Gun/GunLib.cs`, `Gun/GunModes.cs` | Gun lib: aim (right mouse / right grip), laser + reticle, fire (left click / trigger), pluggable `IGunMode`s. Built-in modes: Place (spawn your last asset where you point), Delete (spawned objects only), Inspect, Measure. Local only. |
 | `Menu/Placement.cs` | `MenuPlacement`, `IRigProvider`, and `PokeInteractor` (VR fingertip presses without physics). |
 | `Menu/MenuInput.cs` | Works with the new Input System, the legacy Input Manager, or both. Also reads a VR controller button. |
 | `Integration/Loader.cs`, `GorillaTagRig.cs` | Entry point for loading from outside a Unity project, and a reflection-based rig adapter for Gorilla Tag. |
@@ -114,6 +115,7 @@ BundleMenu World (Canvas: World Space)
 | `↑` / `↓` then `Enter` | Keyboard / gamepad navigation |
 | Right-click a settings row | Cycle that setting backwards |
 | Right-click a bundle row | Open its details |
+| Hold right mouse + left-click | Gun: aim and fire (turn it on in Library › Gun). VR: right grip + trigger |
 
 **Changing the animation style:**
 - **Settings page** (gear icon) › *Entrance*: Fade, Pop, Slide In, Staggered, Cascade. It replays immediately so you can see it.

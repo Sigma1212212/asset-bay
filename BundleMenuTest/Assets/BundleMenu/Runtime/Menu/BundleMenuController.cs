@@ -67,6 +67,12 @@ namespace BundleMenu
         [Range(0.2f, 1f)] public float wristSizeMultiplier = 0.55f;
         [Tooltip("Fingertip transforms that can press world-space buttons (VR).")]
         public List<Transform> pokeTips = new List<Transform>();
+        [Header("Gun")]
+        [Tooltip("Desktop: hold this to aim (right mouse by default), left-click to fire. VR: right grip + trigger.")]
+        public KeyCode gunAimKey = KeyCode.Mouse1;
+        [Tooltip("VR hand the gun points from when not using a game rig. Aims along its forward axis.")]
+        public Transform gunHand;
+
         [Tooltip("Click GUI window size relative to the panel's design size.")]
         [Range(0.6f, 1.6f)] public float guiScale = 1.1f;
         [Tooltip("Click GUI window centre, 0..1 of the screen. Remembered when you drag it.")]
@@ -84,6 +90,7 @@ namespace BundleMenu
 
         public BundleService Service { get; private set; }
         public AssetSpawner Spawner { get; private set; }
+        public GunLib Gun { get; private set; }
         public MenuAnimator Animator { get; private set; }
         public MenuTheme CurrentTheme { get; private set; }
         public bool IsOpen => Animator != null && Animator.PanelTargetOpen;
@@ -167,6 +174,17 @@ namespace BundleMenu
             pointer.OnScroll = dir => { if (IsOpen) Page(dir); };
             pointer.OnWindowDragged = pos => { guiPosition = pos; SavePrefs(); };
 
+            Gun = gameObject.AddComponent<GunLib>();
+            Gun.AimKey = gunAimKey;
+            Gun.Rig = () => Rig;
+            Gun.Theme = () => CurrentTheme;
+            Gun.Blocked = () => pointer != null && pointer.OverMenu;
+            Gun.Report = message => { Toast(message, ToastKind.Info); dirty = true; };
+            Gun.Register(new PlaceMode(Spawner));
+            Gun.Register(new DeleteMode(Spawner));
+            Gun.Register(new InspectMode());
+            Gun.Register(new MeasureMode());
+
             CurrentTheme = ResolveTheme(theme);
             BuildView();
             pages.Push(new LibraryPage());
@@ -220,6 +238,8 @@ namespace BundleMenu
         private void LateUpdate()
         {
             if (host.gameObject.activeSelf) UpdateWorldPose(snap: false);
+
+            if (Gun != null && Gun.Aiming && host.gameObject.activeSelf) dirty = true; // live target readout
 
             if (dirty && host.gameObject.activeSelf)
             {
@@ -492,6 +512,9 @@ namespace BundleMenu
             if (IsOpen && placement == MenuPlacement.ClickGui) ApplyPlacement();
             dirty = true;
         }
+
+        /// <summary>Re-render the current page in place (no entrance animation).</summary>
+        public void RefreshNow() => dirty = true;
 
         public void ReplayEntrance()
         {

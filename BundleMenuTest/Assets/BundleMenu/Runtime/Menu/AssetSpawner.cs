@@ -20,6 +20,44 @@ namespace BundleMenu
 
         public int Count => spawned.Values.Sum(l => l.Count(g => g != null));
 
+        /// <summary>The last GameObject asset used, so the gun can place more of it.</summary>
+        public GameObject LastPrefab { get; private set; }
+        public string LastBundleId { get; private set; }
+
+        public bool IsSpawned(GameObject go) =>
+            go != null && spawned.Values.Any(list => list.Contains(go));
+
+        /// <summary>Walks up from a collider hit to the spawned root object, if any.</summary>
+        public GameObject SpawnedRootOf(Transform t)
+        {
+            for (; t != null; t = t.parent)
+                if (IsSpawned(t.gameObject)) return t.gameObject;
+            return null;
+        }
+
+        public bool Despawn(GameObject go)
+        {
+            foreach (var list in spawned.Values)
+                if (list.Remove(go)) { Destroy(go); return true; }
+            return false;
+        }
+
+        /// <summary>Instantiate a prefab at an exact pose (used by the gun).</summary>
+        public GameObject SpawnAt(GameObject prefab, string bundleId, Vector3 position, Quaternion rotation)
+        {
+            if (prefab == null) return null;
+            var list = ListFor(bundleId);
+            list.RemoveAll(g => g == null);
+            if (list.Count >= MaxPerBundle) { Destroy(list[0]); list.RemoveAt(0); }
+
+            var go = Instantiate(prefab, position, rotation, Container);
+            go.name = prefab.name;
+            go.SetActive(true);
+            go.AddComponent<SpawnPop>();
+            list.Add(go);
+            return go;
+        }
+
         /// <summary>Returns a one-line human description of what happened.</summary>
         public string Use(Object asset, string bundleId, Camera viewer)
         {
@@ -30,6 +68,8 @@ namespace BundleMenu
 
                 case GameObject prefab:
                 {
+                    LastPrefab = prefab;
+                    LastBundleId = bundleId;
                     var list = ListFor(bundleId);
                     list.RemoveAll(g => g == null);
                     if (list.Count >= MaxPerBundle)
@@ -72,6 +112,7 @@ namespace BundleMenu
 
         public void ClearBundle(string bundleId)
         {
+            if (LastBundleId == bundleId) { LastPrefab = null; LastBundleId = null; }
             if (!spawned.TryGetValue(bundleId, out var list)) return;
             foreach (var g in list) if (g != null) Destroy(g);
             spawned.Remove(bundleId);

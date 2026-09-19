@@ -67,12 +67,13 @@ namespace BundleMenu
             }
         }
 
-        /// <summary>0 = left, 1 = right.</summary>
+        /// <summary>0 = left, 1 = right, 2 = middle.</summary>
         public static bool MouseHeld(int button)
         {
 #if ENABLE_INPUT_SYSTEM
             var mouse = Mouse.current;
-            if (mouse != null) return button == 0 ? mouse.leftButton.isPressed : mouse.rightButton.isPressed;
+            if (mouse != null)
+                return button == 0 ? mouse.leftButton.isPressed : button == 1 ? mouse.rightButton.isPressed : mouse.middleButton.isPressed;
 #endif
 #if ENABLE_LEGACY_INPUT_MANAGER || !ENABLE_INPUT_SYSTEM
             if (!legacyBroken)
@@ -102,6 +103,46 @@ namespace BundleMenu
 #endif
                 return 0f;
             }
+        }
+
+        /// <summary>Held state of a VR controller's grip or trigger (analog values count past 0.5).</summary>
+        public static bool XRHeld(bool rightHand, bool trigger)
+        {
+            try
+            {
+                var device = InputDevices.GetDeviceAtXRNode(rightHand ? XRNode.RightHand : XRNode.LeftHand);
+                if (!device.isValid) return false;
+                if (device.TryGetFeatureValue(trigger ? UnityEngine.XR.CommonUsages.trigger : UnityEngine.XR.CommonUsages.grip, out float v))
+                    return v > 0.5f;
+                return device.TryGetFeatureValue(trigger ? UnityEngine.XR.CommonUsages.triggerButton : UnityEngine.XR.CommonUsages.gripButton, out bool b) && b;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>Held state of a key, including KeyCode.Mouse0/1/2.</summary>
+        public static bool KeyHeld(KeyCode key)
+        {
+            if (key == KeyCode.None) return false;
+            if (key >= KeyCode.Mouse0 && key <= KeyCode.Mouse2) return MouseHeld(key - KeyCode.Mouse0);
+#if ENABLE_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            if (kb != null && TryMap(key, out var k))
+            {
+                var control = kb[k];
+                if (control != null) return control.isPressed;
+            }
+#endif
+#if ENABLE_LEGACY_INPUT_MANAGER || !ENABLE_INPUT_SYSTEM
+            if (!legacyBroken)
+            {
+                try { return Input.GetKey(key); }
+                catch (InvalidOperationException) { legacyBroken = true; }
+            }
+#endif
+            return false;
         }
 
         /// <summary>True when a VR headset is actually running (as opposed to desktop / PC mode).</summary>

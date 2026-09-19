@@ -20,6 +20,9 @@ namespace BundleMenu
         Camera Camera { get; }
         Transform WristAnchor { get; }            // null = simulate one in front of the camera
         IReadOnlyList<Transform> PokeTips { get; } // fingertips that can press world-space buttons
+
+        /// <summary>Where the gun points from in VR (null = no tracked hand; desktop uses the mouse instead).</summary>
+        Ray? HandAimRay { get; }
     }
 
     public sealed class InspectorRig : IRigProvider
@@ -30,6 +33,9 @@ namespace BundleMenu
         public Camera Camera => owner.viewCamera != null ? owner.viewCamera : Camera.main;
         public Transform WristAnchor => owner.wristAnchor;
         public IReadOnlyList<Transform> PokeTips => owner.pokeTips;
+
+        public Ray? HandAimRay =>
+            owner.gunHand != null ? new Ray(owner.gunHand.position, owner.gunHand.forward) : (Ray?)null;
     }
 
     /// <summary>

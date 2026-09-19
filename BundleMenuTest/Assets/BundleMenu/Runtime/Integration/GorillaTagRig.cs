@@ -21,7 +21,7 @@ namespace BundleMenu
         private readonly Func<object> instance;
 
         private Camera camera;
-        private Transform leftHand;
+        private Transform leftHand, rightHand;
         private readonly List<Transform> tips = new List<Transform>();
 
         private GorillaTagRig(Type taggerType, Func<object> instance)
@@ -66,6 +66,18 @@ namespace BundleMenu
             }
         }
 
+        /// <summary>Gorilla Tag's hand transforms point along -up (the back of the hand faces +up).</summary>
+        public Ray? HandAimRay
+        {
+            get
+            {
+                if (rightHand == null) Refresh();
+                if (rightHand == null) return null;
+                var dir = -rightHand.up;
+                return new Ray(rightHand.position + dir * 0.05f, dir);
+            }
+        }
+
         public IReadOnlyList<Transform> PokeTips
         {
             get
@@ -91,6 +103,8 @@ namespace BundleMenu
             if (cam != null) camera = cam;
             var hand = AsTransform(Member(tagger, "leftHandTransform"));
             if (hand != null) leftHand = hand;
+            var rHand = AsTransform(Member(tagger, "rightHandTransform"));
+            if (rHand != null) rightHand = rHand;
 
             tips.Clear();
             // Only the right fingertip presses: the menu sits on the left wrist, so the left finger would

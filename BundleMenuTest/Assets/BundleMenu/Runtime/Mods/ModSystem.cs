@@ -12,6 +12,8 @@ namespace BundleMenu
         public Func<MenuTheme> Theme;
         public Func<bool> GunUsesRightGrip;   // the gun owns the right grip while it's enabled
         public Action<string> Toast;
+        public Canvas ScreenCanvas;           // for on-screen readouts (speedometer)
+        public Func<bool> Allowed;            // lobby gate, for things outside the runner (gun modes)
     }
 
     /// <summary>
@@ -25,10 +27,34 @@ namespace BundleMenu
         public abstract string Hint { get; }            // controls, shown in the menu row
         public bool Enabled { get; internal set; }
 
+        /// <summary>Adjustable values shown under the mod in the menu (click cycles, right-click goes back).</summary>
+        public virtual IEnumerable<ModSetting> Settings => Array.Empty<ModSetting>();
+
         public virtual void OnEnable(ModContext ctx) { }
         public virtual void OnDisable(ModContext ctx) { }
         public virtual void Tick(ModContext ctx) { }
         public virtual void FixedTick(ModContext ctx) { }
+    }
+
+    public sealed class ModSetting
+    {
+        public string Name;
+        public Func<string> Value;
+        public Action<int> Cycle;
+
+        public static ModSetting Choice(string name, float[] options, Func<float> get, Action<float> set, string format)
+        {
+            return new ModSetting
+            {
+                Name = name,
+                Value = () => string.Format(format, get()),
+                Cycle = dir =>
+                {
+                    int i = Array.FindIndex(options, o => Mathf.Approximately(o, get()));
+                    set(options[((i < 0 ? 0 : i) + dir + options.Length) % options.Length]);
+                },
+            };
+        }
     }
 
     /// <summary>
@@ -57,17 +83,29 @@ namespace BundleMenu
             Context.Theme = ctx.Theme;
             Context.GunUsesRightGrip = ctx.GunUsesRightGrip;
             Context.Toast = ctx.Toast;
+            Context.ScreenCanvas = ctx.ScreenCanvas;
+            Context.Allowed = () => Allowed;
             CreateDefaults();
             Lobby = Available ? Context.Player.Lobby : LobbyKind.NotGorillaTag;
         }
 
         private void CreateDefaults()
         {
+            // Movement
             mods.Add(new PlatformsMod());
             mods.Add(new FlyMod());
+            mods.Add(new NoclipMod());
             mods.Add(new SpeedBoostMod());
             mods.Add(new LowGravityMod());
+            mods.Add(new HoverMod());
+            mods.Add(new DashMod());
+            mods.Add(new RewindMod());
             mods.Add(new SizeMod());
+            // Visual
+            mods.Add(new EspMod());
+            mods.Add(new HandTrailsMod());
+            mods.Add(new SpeedometerMod());
+            mods.Add(new FreecamMod());
         }
 
         public string Toggle(Mod mod)
@@ -88,6 +126,11 @@ namespace BundleMenu
             catch (Exception e) { Debug.LogException(e); }
             Changed?.Invoke();
         }
+
+        public Mod Find(string name) =>
+            mods.Find(m => string.Equals(m.Name.Replace(" ", ""), name.Replace(" ", ""), StringComparison.OrdinalIgnoreCase));
+
+        public string Set(Mod mod, bool on) => mod.Enabled == on ? $"{mod.Name} already {(on ? "on" : "off")}" : Toggle(mod);
 
         public void DisableAll()
         {
@@ -249,6 +292,11 @@ namespace BundleMenu
         public float Speed = 11f;
         private float throttle;
 
+        public override IEnumerable<ModSetting> Settings => new[]
+        {
+            ModSetting.Choice("Fly speed", new[] { 6f, 11f, 18f, 28f }, () => Speed, v => Speed = v, "{0:0} m/s"),
+        };
+
         public override void FixedTick(ModContext ctx)
         {
             bool held = MenuInput.VRActive ? MenuInput.XRButtonHeld(false, primary: true) : MenuInput.KeyHeld(KeyCode.F);
@@ -268,8 +316,14 @@ namespace BundleMenu
     public sealed class SpeedBoostMod : Mod
     {
         public override string Name => "Speed Boost";
-        public override string Hint => "x1.35";
+        public override string Hint => $"x{Multiplier:0.##}";
+        public float Multiplier = 1.35f;
         private float? jump, maxJump;
+
+        public override IEnumerable<ModSetting> Settings => new[]
+        {
+            ModSetting.Choice("Boost", new[] { 1.15f, 1.35f, 1.6f, 2f, 2.5f }, () => Multiplier, v => Multiplier = v, "x{0:0.##}"),
+        };
 
         public override void OnEnable(ModContext ctx)
         {
@@ -280,8 +334,8 @@ namespace BundleMenu
         public override void Tick(ModContext ctx)
         {
             // Re-applied every frame because the game resets these when you change areas.
-            if (jump != null) ctx.Player.JumpMultiplier = jump.Value * 1.35f;
-            if (maxJump != null) ctx.Player.MaxJumpSpeed = maxJump.Value * 1.35f;
+            if (jump != null) ctx.Player.JumpMultiplier = jump.Value * Multiplier;
+            if (maxJump != null) ctx.Player.MaxJumpSpeed = maxJump.Value * Multiplier;
         }
 
         public override void OnDisable(ModContext ctx)
@@ -307,14 +361,29 @@ namespace BundleMenu
     /// <summary>Grow bigger (x1.5). Your original size comes back when it's switched off.</summary>
     public sealed class SizeMod : Mod
     {
-        public override string Name => "Big Monke";
-        public override string Hint => "x1.5 size";
+        public override string Name => "Size";
+        public override string Hint => $"x{Factor:0.##}";
+        public float Factor = 1.5f;
         private float original = 1f;
+        private float applied;
+
+        public override IEnumerable<ModSetting> Settings => new[]
+        {
+            ModSetting.Choice("Size", new[] { 0.5f, 0.75f, 1.5f, 2f }, () => Factor, v => Factor = v, "x{0:0.##}"),
+        };
 
         public override void OnEnable(ModContext ctx)
         {
             original = ctx.Player.Scale ?? 1f;
-            ctx.Player.SetScale(original * 1.5f);
+            applied = Factor;
+            ctx.Player.SetScale(original * Factor);
+        }
+
+        public override void Tick(ModContext ctx)
+        {
+            if (Mathf.Approximately(applied, Factor)) return; // setting changed while on
+            applied = Factor;
+            ctx.Player.SetScale(original * Factor);
         }
 
         public override void OnDisable(ModContext ctx) => ctx.Player.SetScale(original);

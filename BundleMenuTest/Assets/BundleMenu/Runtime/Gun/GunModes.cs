@@ -108,4 +108,36 @@ namespace BundleMenu
             return $"Distance: {d:0.00} m";
         }
     }
+
+    /// <summary>
+    /// Grapple: fire at a surface and you're yanked toward it, arcing slightly upward so you clear ledges.
+    /// Moves only you, and only where mods are allowed (offline, private or modded rooms).
+    /// </summary>
+    public sealed class GrappleMode : IGunMode
+    {
+        private readonly ModContext ctx;
+        public GrappleMode(ModContext ctx) => this.ctx = ctx;
+
+        public string Name => "Grapple";
+
+        public Color? Tint(GunHit hit) =>
+            !Allowed ? new Color(0.55f, 0.55f, 0.6f) : hit.HasHit ? (Color?)null : new Color(0.55f, 0.55f, 0.6f);
+
+        public string Describe(GunHit hit) => !Allowed ? "paused (public lobby)" : hit.HasHit ? $"{hit.Distance:0.0} m" : "no anchor";
+
+        private bool Allowed => ctx.Allowed == null || ctx.Allowed();
+
+        public string Fire(GunHit hit)
+        {
+            if (!Allowed) return "Grapple is off in public lobbies.";
+            if (!hit.HasHit) return "Nothing to grab onto.";
+            var rb = ctx.Player?.Body;
+            if (rb == null) return "Your player isn't loaded yet.";
+
+            var to = hit.Point - rb.position;
+            float speed = Mathf.Clamp(to.magnitude * 2.2f, 8f, 32f);
+            rb.velocity = to.normalized * speed + Vector3.up * Mathf.Min(6f, to.magnitude * 0.25f);
+            return $"Grapple  {to.magnitude:0.0} m";
+        }
+    }
 }

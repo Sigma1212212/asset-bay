@@ -257,6 +257,20 @@ namespace BundleMenu
                     Interactable = runner.Allowed || m.Enabled,
                     OnClick = () => { ctx.Toast(runner.Toggle(m), ToastKind.Info); ctx.RefreshNow(); },
                 });
+
+                if (!m.Enabled) continue;
+                foreach (var setting in m.Settings)
+                {
+                    var st = setting;
+                    rows.Add(new RowSpec
+                    {
+                        Key = "set:" + m.Name + ":" + st.Name,
+                        Label = "   " + st.Name,
+                        Value = st.Value(),
+                        OnClick = () => { st.Cycle(+1); ctx.RefreshNow(); },
+                        OnAltClick = () => { st.Cycle(-1); ctx.RefreshNow(); },
+                    });
+                }
             }
 
             rows.Add(new RowSpec

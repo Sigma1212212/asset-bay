@@ -212,8 +212,10 @@ namespace BundleMenu
                 Theme = () => CurrentTheme,
                 GunUsesRightGrip = () => Gun != null && Gun.GunEnabled,
                 Toast = message => Toast(message, ToastKind.Info),
+                ScreenCanvas = screenCanvas,
             });
             Mods.Changed += () => dirty = true;
+            if (Mods.Available) Gun.Register(new GrappleMode(Mods.Context));
 
             CurrentTheme = ResolveTheme(theme);
             BuildView();

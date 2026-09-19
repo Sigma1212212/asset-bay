@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using UnityEngine;
@@ -23,7 +24,10 @@ namespace BundleMenu
 
         private readonly Type playerType, networkType;
         private readonly PropertyInfo playerInstance, rigidbodyProp, jumpMultProp, scaleProp;
-        private readonly FieldInfo bodyColliderField, layersField, maxJumpField, networkInstance;
+        private readonly FieldInfo bodyColliderField, headColliderField, layersField, maxJumpField, networkInstance;
+        private readonly Type rigType;
+        private readonly FieldInfo rigOffline, rigMine, rigBody, rigName;
+        private readonly PropertyInfo rigScale;
         private readonly MethodInfo setScale, teleport;
         private readonly PropertyInfo inRoom, isPrivate, gameMode;
 
@@ -36,6 +40,18 @@ namespace BundleMenu
             jumpMultProp = player.GetProperty("jumpMultiplier", Pub);
             scaleProp = player.GetProperty("ScaleMultiplier", Pub);
             bodyColliderField = player.GetField("bodyCollider", Pub);
+            headColliderField = player.GetField("headCollider", Pub);
+
+            // Other players' rigs, for ESP (VRRig: isOfflineVRRig, isMyPlayer, bodyTransform, playerNameVisible, scaleFactor).
+            rigType = player.Assembly.GetType("VRRig", false);
+            if (rigType != null)
+            {
+                rigOffline = rigType.GetField("isOfflineVRRig", Pub);
+                rigMine = rigType.GetField("isMyPlayer", Pub);
+                rigBody = rigType.GetField("bodyTransform", Pub);
+                rigName = rigType.GetField("playerNameVisible", Pub);
+                rigScale = rigType.GetProperty("scaleFactor", Pub);
+            }
             layersField = player.GetField("locomotionEnabledLayers", Pub);
             maxJumpField = player.GetField("maxJumpSpeed", Pub);
             setScale = player.GetMethod("SetScaleMultiplier", Pub, null, new[] { typeof(float) }, null);
@@ -67,6 +83,48 @@ namespace BundleMenu
         public Rigidbody Body => Safe(() => rigidbodyProp?.GetValue(Player) as Rigidbody);
 
         public Collider BodyCollider => Safe(() => bodyColliderField?.GetValue(Player) as Collider);
+
+        public Collider HeadCollider => Safe(() => headColliderField?.GetValue(Player) as Collider);
+
+        /// <summary>Layers your hands and body collide with. Setting it to 0 lets you pass through everything.</summary>
+        public int? LocomotionLayers
+        {
+            get => Safe(() => layersField?.GetValue(Player) is LayerMask m ? m.value : (int?)null);
+            set { if (value != null) Safe(() => { layersField?.SetValue(Player, (LayerMask)value.Value); return 0; }); }
+        }
+
+        public struct OtherPlayer
+        {
+            public Transform Body;
+            public string Name;
+            public float Scale;
+        }
+
+        /// <summary>Everyone in the room except you. Cheap enough to call a few times a second, not every frame.</summary>
+        public List<OtherPlayer> OtherPlayers()
+        {
+            var result = new List<OtherPlayer>();
+            if (rigType == null) return result;
+            UnityEngine.Object[] rigs;
+            try { rigs = UnityEngine.Object.FindObjectsByType(rigType, FindObjectsSortMode.None); }
+            catch { return result; }
+
+            foreach (var rig in rigs)
+            {
+                if (rig == null) continue;
+                if (Safe(() => (bool?)rigOffline?.GetValue(rig)) == true) continue;
+                if (Safe(() => (bool?)rigMine?.GetValue(rig)) == true) continue;
+                var body = Safe(() => rigBody?.GetValue(rig) as Transform);
+                if (body == null || !body.gameObject.activeInHierarchy) continue;
+                result.Add(new OtherPlayer
+                {
+                    Body = body,
+                    Name = Safe(() => rigName?.GetValue(rig) as string) ?? "player",
+                    Scale = Safe(() => rigScale?.GetValue(rig) as float?) ?? 1f,
+                });
+            }
+            return result;
+        }
 
         /// <summary>A physics layer the player walks on (first layer in locomotionEnabledLayers), or -1.</summary>
         public int WalkableLayer

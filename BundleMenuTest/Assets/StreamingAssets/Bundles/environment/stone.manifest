@@ -1,0 +1,35 @@
+ManifestFileVersion: 0
+CRC: 129978288
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: f3ce076c59cc787d554d55518b491c3a
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 312b36f2f9ab156aa74cf892be4001db
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: f3ce076c59cc787d554d55518b491c3a
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 23
+  Script: {instanceID: 0}
+- Class: 33
+  Script: {instanceID: 0}
+- Class: 43
+  Script: {instanceID: 0}
+- Class: 48
+  Script: {instanceID: 0}
+- Class: 136
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/BundleMenuSamples/Pillar.mat
+- Assets/BundleMenuSamples/Pillar.prefab
+Dependencies: []

@@ -1,0 +1,17 @@
+ManifestFileVersion: 0
+CRC: 1650711883
+AssetBundleManifest:
+  AssetBundleInfos:
+    Info_0:
+      Name: shared/materials
+      Dependencies: {}
+    Info_1:
+      Name: props/crates
+      Dependencies:
+        Dependency_0: shared/materials
+    Info_2:
+      Name: effects/orbs
+      Dependencies: {}
+    Info_3:
+      Name: environment/stone
+      Dependencies: {}

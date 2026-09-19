@@ -1,0 +1,167 @@
+using System;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
+
+namespace BundleMenu
+{
+    /// <summary>
+    /// A themed button. Built on Selectable so mouse, keyboard/gamepad navigation and VR poke all
+    /// share the same Normal / Hover / Pressed / Selected / Disabled states.
+    ///
+    /// Visual feedback lives on its own transform ("Body"), separate from the entrance animation's
+    /// transform, so a hover can never fight an animating row.
+    /// </summary>
+    public sealed class MenuButton : Selectable, IPointerClickHandler, ISubmitHandler
+    {
+        public Action OnClick;
+        public Action OnAltClick;          // right click / secondary action
+
+        [NonSerialized] public Image Fill;
+        [NonSerialized] public Image Edge;
+        [NonSerialized] public MenuTheme Theme;
+
+        /// <summary>"On" = this item represents something active (a loaded bundle, the current option).</summary>
+        public bool IsOn
+        {
+            get => isOn;
+            set { if (isOn == value) return; isOn = value; Retarget(); }
+        }
+
+        /// <summary>Scale to use when hovered. Rows use a subtle 1.02, icon buttons a punchier 1.1.</summary>
+        public float HoverScale = 1.025f;
+        public float PressScale = 0.95f;
+
+        private bool isOn;
+        private SelectionState visualState = SelectionState.Normal;
+        private Color fillTarget, edgeTarget;
+        private float scaleTarget = 1f, scale = 1f, scaleVelocity;
+        private float lastClickTime = -1f;
+
+        public void Init(MenuTheme theme, Image fill, Image edge)
+        {
+            Theme = theme;
+            Fill = fill;
+            Edge = edge;
+            targetGraphic = fill;
+            Retarget(instant: true);
+        }
+
+        protected override void Awake()
+        {
+            base.Awake();
+            transition = Transition.None; // we animate ourselves in DoStateTransition
+        }
+
+        protected override void OnEnable()
+        {
+            base.OnEnable();
+            scale = scaleTarget = 1f;
+            scaleVelocity = 0f;
+            transform.localScale = Vector3.one;
+            Retarget(instant: true);
+        }
+
+        public void OnPointerClick(PointerEventData eventData)
+        {
+            if (!IsActive() || !IsInteractable()) return;
+            if (eventData.button == PointerEventData.InputButton.Right) Fire(OnAltClick ?? OnClick);
+            else if (eventData.button == PointerEventData.InputButton.Left) Fire(OnClick);
+        }
+
+        public void OnSubmit(BaseEventData eventData)
+        {
+            if (!IsActive() || !IsInteractable()) return;
+            DoStateTransition(SelectionState.Pressed, false);
+            Fire(OnClick);
+            Invoke(nameof(ReturnFromSubmit), 0.1f);
+        }
+
+        /// <summary>For non-pointer interactors (VR finger poke): drive hover / press / click.</summary>
+        public void SetPokeHover(bool hovering)
+        {
+            if (!IsInteractable()) return;
+            if (EventSystem.current == null) { DoStateTransition(hovering ? SelectionState.Highlighted : SelectionState.Normal, false); return; }
+            var data = new PointerEventData(EventSystem.current) { button = PointerEventData.InputButton.Left };
+            if (hovering) OnPointerEnter(data); else OnPointerExit(data);
+        }
+
+        public void PokePress()
+        {
+            if (!IsActive() || !IsInteractable()) return;
+            DoStateTransition(SelectionState.Pressed, false);
+            Fire(OnClick);
+            Invoke(nameof(ReturnFromSubmit), 0.12f);
+        }
+
+        private void ReturnFromSubmit() => DoStateTransition(currentSelectionState, false);
+
+        private void Fire(Action action)
+        {
+            // Debounce: VR pokes and double events can otherwise trigger twice.
+            if (Time.unscaledTime - lastClickTime < 0.12f) return;
+            lastClickTime = Time.unscaledTime;
+            // A tiny extra dip on click so the press reads even for very fast taps.
+            scaleVelocity -= 2.5f;
+            try { action?.Invoke(); }
+            catch (Exception e) { Debug.LogException(e); }
+        }
+
+        protected override void DoStateTransition(SelectionState state, bool instant)
+        {
+            visualState = state;
+            Retarget(instant);
+        }
+
+        private void Retarget(bool instant = false)
+        {
+            if (Theme == null) return;
+
+            Color fill = Theme.ButtonFill, edge = Theme.ButtonEdge;
+            scaleTarget = 1f;
+
+            switch (visualState)
+            {
+                case SelectionState.Highlighted:
+                    fill = Theme.ButtonFillHover; edge = Theme.ButtonEdgeHover; scaleTarget = HoverScale; break;
+                case SelectionState.Pressed:
+                    fill = Theme.ButtonFillPressed; edge = Theme.ButtonEdgeHover; scaleTarget = PressScale; break;
+                case SelectionState.Selected:
+                    // keyboard / gamepad focus: an edge highlight, no scale (so it doesn't look "stuck" hovered)
+                    edge = Color.Lerp(Theme.ButtonEdge, Theme.ButtonEdgeHover, 0.7f); break;
+                case SelectionState.Disabled:
+                    fill.a *= 0.45f; edge.a *= 0.3f; break;
+            }
+
+            if (isOn)
+            {
+                fill = Color.Lerp(fill, Theme.Accent, 0.16f);
+                edge = Color.Lerp(edge, Theme.Accent, 0.55f);
+                edge.a = Mathf.Max(edge.a, 0.55f);
+            }
+
+            fillTarget = fill;
+            edgeTarget = edge;
+
+            if (instant)
+            {
+                if (Fill != null) Fill.color = fillTarget;
+                if (Edge != null) Edge.color = edgeTarget;
+            }
+        }
+
+        private void Update()
+        {
+            float dt = Mathf.Min(Time.unscaledDeltaTime, 0.05f);
+            float k = 1f - Mathf.Exp(-dt * 18f);
+            if (Fill != null) Fill.color = Color.Lerp(Fill.color, fillTarget, k);
+            if (Edge != null) Edge.color = Color.Lerp(Edge.color, edgeTarget, k);
+
+            // Under-damped spring: presses squish, releases bounce back slightly past rest.
+            const float stiffness = 520f, damping = 24f;
+            scaleVelocity += ((scaleTarget - scale) * stiffness - scaleVelocity * damping) * dt;
+            scale += scaleVelocity * dt;
+            transform.localScale = new Vector3(scale, scale, 1f);
+        }
+    }
+}

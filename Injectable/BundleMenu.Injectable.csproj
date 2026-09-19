@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Builds the same Runtime/ sources the Unity package uses into BundleMenu.dll,
+    compiled against Gorilla Tag's own Unity assemblies (Unity 6000.2), so it can be
+    loaded by a Mono injector (entry: BundleMenu.Loader.Inject) or called from a BepInEx plugin.
+
+      dotnet build -c Release
+      dotnet build -c Release -p:GameDir="D:\Games\Gorilla Tag"
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>BundleMenu</AssemblyName>
+    <RootNamespace>BundleMenu</RootNamespace>
+    <LangVersion>9.0</LangVersion>               <!-- same C# version Unity 2022 compiles, so one source tree serves both -->
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>false</ImplicitUsings>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <DebugType>portable</DebugType>
+    <Version>1.0.0</Version>
+    <!-- Game ships both input backends enabled; MenuInput picks at runtime and survives either being off. -->
+    <DefineConstants>$(DefineConstants);ENABLE_INPUT_SYSTEM;ENABLE_LEGACY_INPUT_MANAGER</DefineConstants>
+    <NoWarn>$(NoWarn);CS0618;CS0649</NoWarn>             <!-- Unity 6 marks a few TMP/Object APIs obsolete; they still work -->
+
+    <GameDir Condition="'$(GameDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Gorilla Tag</GameDir>
+    <Managed>$(GameDir)\Gorilla Tag_Data\Managed</Managed>
+    <RuntimeSrc>..\BundleMenuTest\Assets\BundleMenu\Runtime</RuntimeSrc>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="$(RuntimeSrc)\**\*.cs" LinkBase="Runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="$(Managed)\UnityEngine.dll" Private="false" />
+    <Reference Include="$(Managed)\UnityEngine.*Module.dll" Private="false" />
+    <Reference Include="$(Managed)\UnityEngine.UI.dll" Private="false" />
+    <Reference Include="$(Managed)\Unity.TextMeshPro.dll" Private="false" />
+    <Reference Include="$(Managed)\Unity.InputSystem.dll" Private="false" />
+  </ItemGroup>
+
+  <Target Name="CheckGame" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(Managed)\UnityEngine.dll')"
+           Text="Gorilla Tag not found at '$(GameDir)'. Build with -p:GameDir=&quot;path\to\Gorilla Tag&quot;." />
+  </Target>
+</Project>

@@ -1,0 +1,36 @@
+ManifestFileVersion: 0
+CRC: 1334092851
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: d0fb6fc28191d099f4c6c4e70c270dab
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 9a4d9a98fb8c314442a64fafe8f9e45e
+  IncrementalBuildHash:
+    serializedVersion: 2
+    Hash: d0fb6fc28191d099f4c6c4e70c270dab
+HashAppended: 0
+ClassTypes:
+- Class: 1
+  Script: {instanceID: 0}
+- Class: 4
+  Script: {instanceID: 0}
+- Class: 21
+  Script: {instanceID: 0}
+- Class: 23
+  Script: {instanceID: 0}
+- Class: 33
+  Script: {instanceID: 0}
+- Class: 43
+  Script: {instanceID: 0}
+- Class: 65
+  Script: {instanceID: 0}
+- Class: 136
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/BundleMenuSamples/Crate.prefab
+- Assets/BundleMenuSamples/Barrel.prefab
+Dependencies:
+- C:/ai shit/modmenu/bundlemenu/BundleMenuTest/Assets/StreamingAssets/Bundles/shared/materials

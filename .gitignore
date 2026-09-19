@@ -1,0 +1,24 @@
+# Unity generated
+BundleMenuTest/[Ll]ibrary/
+BundleMenuTest/[Tt]emp/
+BundleMenuTest/[Oo]bj/
+BundleMenuTest/[Ll]ogs/
+BundleMenuTest/[Uu]ser[Ss]ettings/
+BundleMenuTest/Build/
+BundleMenuTest/shots/
+*.csproj.user
+*.sln
+!Injector/*.sln
+
+# dotnet
+**/bin/
+**/obj/
+
+# Never commit the game's own assemblies (proprietary)
+**/Gorilla Tag_Data/
+**/Managed/*.dll
+
+# Launcher lives in its own GPL repo (a GitHub fork of hamburbur-injector)
+Injector/
+
+*.log

@@ -66,8 +66,38 @@ namespace BundleMenu
         public event Action Changed;
 
         private float nextPost;
-        private bool busy;
+        private bool busy, polled;
         private string joinedRoom, joinedPlayer; // hashes we last announced, so we can leave cleanly
+
+        // ---- live mode: one WebSocket, updates pushed both ways (polling is the fallback)
+        /// <summary>Use the live connection when it works. Off = always poll.</summary>
+        public bool UseLive = true;
+        public bool IsLive => link != null && link.Connected;
+        private LiveLink link;
+        private string linkRoom;
+        private int liveFailures;
+        private float liveRetryAt, nextIdentity, nextStateCheck, lastSentAt, nextRebuild;
+        private string roomHash, playerHash, room, lastSentJson;
+        private bool membersDirty;
+        private readonly Dictionary<string, (MenuState state, float seen)> liveMembers = new Dictionary<string, (MenuState, float)>();
+
+        [Serializable] private sealed class LiveMsg
+        {
+            public string t, player, from, error;
+            public MenuState state;
+            public Member[] members;
+            public ControlCmd cmd;
+        }
+
+        private string LiveUrl
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(Endpoint)) return null;
+                var baseUrl = Endpoint.Replace("https://", "wss://").Replace("http://", "ws://");
+                return baseUrl.Substring(0, baseUrl.LastIndexOf('/') + 1) + $"live?room={roomHash}&player={playerHash}";
+            }
+        }
 
         [Serializable] private sealed class Member { public string player; public MenuState state; }
         [Serializable] private sealed class Command { public string from; public ControlCmd cmd; }
@@ -83,6 +113,11 @@ namespace BundleMenu
         public async System.Threading.Tasks.Task<string> SendControl(GorillaTagPlayer.OtherPlayer target, ControlCmd cmd)
         {
             string to = HashFor(target);
+            if (to != null && IsLive)
+            {
+                link.Send($"{{\"t\":\"control\",\"target\":\"{to}\",\"cmd\":{JsonUtility.ToJson(cmd)}}}");
+                return null; // instant; refusals come back as an "error" message
+            }
             if (to == null || joinedRoom == null || string.IsNullOrEmpty(ControlEndpoint)) return "not in a room";
             string body = $"{{\"room\":\"{joinedRoom}\",\"from\":\"{joinedPlayer}\",\"target\":\"{to}\",\"cmd\":{JsonUtility.ToJson(cmd)}}}";
             try
@@ -105,22 +140,121 @@ namespace BundleMenu
 
         private void Update()
         {
-            if (busy || Player == null || Time.unscaledTime < nextPost) return;
-            nextPost = Time.unscaledTime + (IntervalNow?.Invoke() ?? Interval);
+            if (Player == null) return;
+            float now = Time.unscaledTime;
 
-            string room = Player.RoomName, me = Player.LocalUserId;
-            if (!Sharing || string.IsNullOrEmpty(room) || string.IsNullOrEmpty(me))
+            if (now >= nextIdentity)
             {
-                Leave();
-                if (Others.Count > 0) { Others.Clear(); Changed?.Invoke(); }
+                nextIdentity = now + 0.5f;
+                string r = Player.RoomName, me = Player.LocalUserId;
+                if (!Sharing || string.IsNullOrEmpty(r) || string.IsNullOrEmpty(me))
+                {
+                    room = null;
+                    Leave();
+                    if (Others.Count > 0) { Others.Clear(); Changed?.Invoke(); }
+                    return;
+                }
+                if (r != room)
+                {
+                    if (joinedRoom != null) Leave(); // switched rooms
+                    room = r;
+                    roomHash = Hash("assetbay:" + r);
+                    playerHash = Hash("assetbay:" + r + ":" + me);
+                    liveMembers.Clear();
+                }
+                currentRoom = room;
+            }
+            if (room == null) return;
+
+            // Live link: open, replace if the room changed, retire if it died.
+            if (link != null && (link.Dead || linkRoom != roomHash))
+            {
+                if (link.Dead) { LastError = link.Error; liveRetryAt = now + (++liveFailures <= 3 ? 5f : 60f); }
+                link.Dispose();
+                link = null;
+            }
+            if (UseLive && link == null && now >= liveRetryAt && LiveUrl != null)
+            {
+                try { link = new LiveLink(new Uri(LiveUrl)); linkRoom = roomHash; }
+                catch (Exception e) { LastError = e.Message; liveRetryAt = now + 60f; }
+            }
+            if (IsLive)
+            {
+                liveFailures = 0;
+                if (polled) LeavePolling();
+                joinedRoom = roomHash;
+                joinedPlayer = playerHash;
+                LiveTick(now);
                 return;
             }
 
-            string roomHash = Hash("assetbay:" + room);
-            string playerHash = Hash("assetbay:" + room + ":" + me);
-            if (joinedRoom != null && joinedRoom != roomHash) Leave(); // switched rooms
-            currentRoom = room;
+            // Fallback: poll.
+            if (busy || now < nextPost) return;
+            nextPost = now + (IntervalNow?.Invoke() ?? Interval);
             Post(roomHash, playerHash, JsonUtility.ToJson(LocalState?.Invoke() ?? new MenuState()), room).Forget();
+        }
+
+        /// <summary>Live mode, every frame: apply what arrived, send our state when it changes.</summary>
+        private void LiveTick(float now)
+        {
+            while (link.Inbox.TryDequeue(out var text))
+            {
+                LiveMsg msg;
+                try { msg = JsonUtility.FromJson<LiveMsg>(text); } catch { continue; }
+                switch (msg?.t)
+                {
+                    case "members":
+                        liveMembers.Clear();
+                        if (msg.members != null) foreach (var m in msg.members) liveMembers[m.player] = (m.state, now);
+                        membersDirty = true;
+                        break;
+                    case "member":
+                        if (msg.player != null) { liveMembers[msg.player] = (msg.state, now); membersDirty = true; }
+                        break;
+                    case "leave":
+                        if (msg.player != null && liveMembers.Remove(msg.player)) membersDirty = true;
+                        break;
+                    case "cmd":
+                        if (msg.cmd != null) { try { CommandReceived?.Invoke(msg.from, msg.cmd); } catch (Exception e) { Debug.LogException(e); } }
+                        break;
+                    case "error":
+                        LastError = msg.error;
+                        break;
+                }
+            }
+
+            // Our state: checked 4x a second, sent only when it changed (or every 10 s so others know we're here).
+            if (now >= nextStateCheck)
+            {
+                nextStateCheck = now + 0.25f;
+                string json = JsonUtility.ToJson(LocalState?.Invoke() ?? new MenuState());
+                if (json != lastSentJson || now - lastSentAt > 10f)
+                {
+                    link.Send($"{{\"t\":\"state\",\"state\":{json}}}");
+                    lastSentJson = json;
+                    lastSentAt = now;
+                }
+            }
+
+            // Anyone we haven't heard from in 30 s is gone (live peers refresh every 10 s, pollers every 5).
+            List<string> stale = null;
+            foreach (var kv in liveMembers) if (now - kv.Value.seen > 30f) (stale ??= new List<string>()).Add(kv.Key);
+            if (stale != null) { foreach (var k in stale) liveMembers.Remove(k); membersDirty = true; }
+
+            // Match hashes to the rigs around us (also re-run each second: players join and leave the lobby).
+            if (membersDirty || now >= nextRebuild)
+            {
+                membersDirty = false;
+                nextRebuild = now + 1f;
+                Others.Clear();
+                foreach (var p in Player.OtherPlayers())
+                {
+                    string h = HashFor(p);
+                    if (h != null && liveMembers.TryGetValue(h, out var m) && m.state != null) Others.Add((p, m.state));
+                }
+                LastError = null;
+                Changed?.Invoke();
+            }
         }
 
         private async System.Threading.Tasks.Task Post(string roomHash, string playerHash, string stateJson, string room)
@@ -132,6 +266,7 @@ namespace BundleMenu
                 string text = await Send(body);
                 joinedRoom = roomHash;
                 joinedPlayer = playerHash;
+                polled = true;
 
                 var reply = JsonUtility.FromJson<Reply>(text);
                 if (reply?.commands != null)
@@ -162,9 +297,19 @@ namespace BundleMenu
 
         private void Leave()
         {
+            link?.Dispose();
+            link = null;
+            lastSentJson = null;
+            if (polled) LeavePolling();
+            joinedRoom = joinedPlayer = null;
+        }
+
+        /// <summary>Tell the server we stopped polling (live members leave by closing their socket).</summary>
+        private void LeavePolling()
+        {
+            polled = false;
             if (joinedRoom == null) return;
             Send($"{{\"room\":\"{joinedRoom}\",\"player\":\"{joinedPlayer}\",\"state\":null}}").Forget();
-            joinedRoom = joinedPlayer = null;
         }
 
         private async System.Threading.Tasks.Task<string> Send(string json)

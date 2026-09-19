@@ -4,6 +4,7 @@
 //   GET /asset-bay/feed            -> {"feed": "<exact feed.json text>", "sig": "<base64 RSA signature>"}
 //   GET /asset-bay/media/<key>     -> a file from the R2 bucket (videos, bundles), with Range support
 //   POST /asset-bay/presence       -> menus in the same room find each other (hashed ids only, see presence.js)
+//   GET  /asset-bay/live (WebSocket) -> the same rooms, pushed live instead of polled
 //   POST /asset-bay/control        -> press a button on another member's menu, only if they allowed it
 //   GET/PUT /asset-bay/settings    -> settings sync by anonymous sync-code hash (see settings.js)
 //   GET /asset-bay/budget          -> today's / this month's usage against the free-tier cut-offs (budget.js)
@@ -16,9 +17,10 @@
 // Content is published from your PC with publish-feed.ps1 (wrangler writes to R2 directly), and the
 // menu only trusts a feed whose signature matches the public key built into it.
 
-import { handleControl, handlePresence, PresenceRoom } from "./presence.js";
+import { handleControl, handleLive, handlePresence, PresenceRoom } from "./presence.js";
 import { Budget, count, flush, isPaused, report } from "./budget.js";
 import { handleSettings, SettingsStore } from "./settings.js";
+import { cachedFeed, cachedMedia } from "./edge.js";
 export { PresenceRoom, Budget, SettingsStore };
 
 const PREFIX = "/asset-bay";
@@ -27,8 +29,15 @@ const SAFE_KEY = /^[A-Za-z0-9][A-Za-z0-9._\-\/]{0,200}$/;
 export default {
   async fetch(request, env, ctx) {
     count("requests");
+    const started = Date.now();
     try {
-      return await route(request, env);
+      let response = await route(request, env, ctx);
+      if (response.status === 101) return response; // WebSocket handshake: must go out untouched
+      // How long the Worker itself took (storage / Durable Object waits included, network to you excluded).
+      const timing = `worker;dur=${Date.now() - started}`;
+      try { response.headers.set("Server-Timing", timing); }
+      catch { response = new Response(response.body, response); response.headers.set("Server-Timing", timing); }
+      return response;
     } finally {
       // Report after the request is counted in full, without delaying the response.
       ctx?.waitUntil?.(flush(env));
@@ -36,7 +45,7 @@ export default {
   },
 };
 
-async function route(request, env) {
+async function route(request, env, ctx) {
   const url = new URL(request.url);
   if (!url.pathname.startsWith(PREFIX)) return notFound();
   const path = url.pathname.slice(PREFIX.length) || "/";
@@ -50,6 +59,13 @@ async function route(request, env) {
     if (isPaused("presence")) return pausedResponse("daily Durable Object allowance");
     count("doCalls");
     return await handleSettings(request, env);
+  }
+
+  if (path === "/live") {
+    // Live room connection (WebSocket). Messages on it are counted by the room itself.
+    if (isPaused("presence")) return pausedResponse("daily Durable Object allowance");
+    count("doCalls");
+    return await handleLive(request, env);
   }
 
   if (path === "/control") {
@@ -72,9 +88,12 @@ async function route(request, env) {
     if (path === "/health") return json({ ok: true });
     if (path === "/feed" || path.startsWith("/media/")) {
       if (isPaused("r2")) return pausedResponse("monthly R2 read allowance");
-      if (path === "/feed") { count("r2Reads", 2); return await feed(env); }
-      count("r2Reads");
-      return await media(request, env, decodeURIComponent(path.slice("/media/".length)));
+      // Served from the edge cache when possible; R2 reads are only counted on a miss.
+      if (path === "/feed") return await cachedFeed(request, ctx, PREFIX, () => { count("r2Reads", 2); return feed(env); });
+      const key = decodeURIComponent(path.slice("/media/".length));
+      if (!SAFE_KEY.test(key) || key.includes("..") || key.startsWith("feed.json")) return notFound();
+      return await cachedMedia(request, ctx, PREFIX, key,
+        (req) => media(req, env, key), () => mediaFull(env, key), () => count("r2Reads"));
     }
     return notFound();
   } catch (err) {
@@ -121,6 +140,19 @@ async function media(request, env, key) {
   }
 
   return new Response(request.method === "HEAD" ? null : object.body, { status, headers });
+}
+
+/** The whole object as a plain 200 (for filling the edge cache), or null if missing / too big to bother. */
+async function mediaFull(env, key, maxBytes = 256 * 1024 * 1024) {
+  const object = await env.MEDIA.get(key);
+  if (!object) return null;
+  if (object.size > maxBytes) { await object.body.cancel(); return null; }
+  const headers = new Headers();
+  object.writeHttpMetadata(headers);
+  headers.set("ETag", object.httpEtag);
+  headers.set("Accept-Ranges", "bytes");
+  headers.set("Content-Length", String(object.size));
+  return new Response(object.body, { status: 200, headers });
 }
 
 function json(data, status = 200, extra = {}) {

@@ -95,11 +95,44 @@ namespace BundleMenu
             }
             EndSection();
 
+            Section("solo test (no friend needed)");
+            var solo = Menu.Solo;
+            if (solo == null) GUILayout.Label("Gorilla Tag only.", sDim);
+            else
+            {
+                if (Check(solo.Active ? "running" : "start a test ghost", solo.Active)) Menu.ToggleSoloTest();
+                Value("state", solo.Status);
+                if (solo.Active)
+                {
+                    GUILayout.Label("A test ghost joined your room: it has a nametag and a menu card you can press, " +
+                                    "and it can press your menu back. Turn on 'let others use my menu' for presses to land.", sDimWrap);
+                    var seen = solo.SeenFromOutside;
+                    Value("ghost sees", seen == null ? "nothing yet" : $"{seen.page} ({seen.rows?.Length ?? 0} rows)");
+                    GUILayout.BeginHorizontal();
+                    if (GUILayout.Button("press row 1", sButton)) Toast(solo.PressRow(0));
+                    if (GUILayout.Button("press row 2", sButton)) Toast(solo.PressRow(1));
+                    if (GUILayout.Button("next page", sButton)) Toast(solo.PressAction("next"));
+                    if (GUILayout.Button("back", sButton)) Toast(solo.PressAction("back"));
+                    GUILayout.EndHorizontal();
+                    if (Button("move the ghost in front of me")) solo.Recall();
+                    foreach (var line in solo.Log) GUILayout.Label(line, sDim);
+                }
+            }
+            EndSection();
+
             Section("broadcasts");
             if (Check("broadcast screens", Menu.BroadcastScreensOn)) Menu.ToggleBroadcastScreens();
             Value("feed", Menu.Feed?.Current != null ? "loaded" : "not loaded");
             if (Button("check feed now")) Menu.RefreshFeedAsync().Forget();
             EndSection();
+        }
+
+        /// <summary>Show a one-line result from the solo test in the window and the game.</summary>
+        private void Toast(string message)
+        {
+            if (string.IsNullOrEmpty(message)) return;
+            error = null;
+            Menu.Toast(message, ToastKind.Info);
         }
 
         private void DrawToolsTab()

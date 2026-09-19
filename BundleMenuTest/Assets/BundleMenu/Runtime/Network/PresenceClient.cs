@@ -60,6 +60,14 @@ namespace BundleMenu
         public GorillaTagPlayer Player;
         public Func<MenuState> LocalState;
 
+        /// <summary>Room and player hashes the server knows us by (null when not in a room).</summary>
+        public string RoomHash => room == null ? null : roomHash;
+        public string PlayerHash => room == null ? null : playerHash;
+        public string RoomName => room;
+
+        /// <summary>A stand-in member for solo testing; added to the room list as if they were really here.</summary>
+        public Func<(GorillaTagPlayer.OtherPlayer player, MenuState state)?> TestPeer;
+
         /// <summary>Everyone in the room (Asset Bay or not), refreshed with the member list.</summary>
         public readonly List<GorillaTagPlayer.OtherPlayer> Roster = new List<GorillaTagPlayer.OtherPlayer>();
 
@@ -272,6 +280,8 @@ namespace BundleMenu
                     string h = HashFor(p);
                     if (h != null && liveMembers.TryGetValue(h, out var m) && m.state != null) Others.Add((p, m.state));
                 }
+                var test = TestPeer?.Invoke();
+                if (test != null) { Roster.Add(test.Value.player); Others.Add(test.Value); }
                 LastError = null;
                 Changed?.Invoke();
             }

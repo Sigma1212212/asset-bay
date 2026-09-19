@@ -425,6 +425,17 @@ namespace BundleMenu
                     SecondaryIcon = Icon.Dot,
                 });
             }
+            if (ctx.IsAdmin && ctx.Solo != null)
+            {
+                rows.Add(new RowSpec
+                {
+                    Key = "solo", Label = "Solo test", Value = ctx.Solo.Active ? ctx.Solo.Status : "off",
+                    IsOn = ctx.Solo.Active, Light = ctx.Solo.Connected ? StatusLight.Ok : ctx.Solo.Active ? StatusLight.Busy : StatusLight.None,
+                    OnClick = () => { ctx.ToggleSoloTest(); ctx.RefreshNow(); },
+                });
+                if (ctx.Solo.Active)
+                    rows.Add(new RowSpec { Key = "recall", Label = "Move test ghost to me", OnClick = () => { ctx.Solo.Recall(); ctx.RefreshNow(); } });
+            }
             if (TagStore.LocalCount > 0)
                 rows.Add(new RowSpec { Key = "clear", Label = "Clear my tags", Value = TagStore.LocalCount.ToString(),
                     OnClick = () => { TagStore.ClearLocal(); ctx.RefreshNow(); } });

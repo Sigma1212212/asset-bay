@@ -98,6 +98,7 @@ namespace BundleMenu
         // ------------------------------------------------------------------ tags
 
         public NameTags Tags { get; private set; }
+        public SoloTest Solo { get; private set; }
 
         private void SetupTags()
         {
@@ -105,6 +106,22 @@ namespace BundleMenu
             Tags.Presence = Presence;
             Tags.ViewCamera = () => Rig.Camera;
             Tags.Enabled = PlayerPrefs.GetInt(Prefs + "tagson", 1) == 1;
+
+            // Try the shared-menu features without a second person.
+            Solo = gameObject.AddComponent<SoloTest>();
+            Solo.Menu = this;
+            Solo.Presence = Presence;
+            Solo.ViewCamera = () => Rig.Camera;
+        }
+
+        /// <summary>Start / stop the solo test (a pretend second player in your room).</summary>
+        public void ToggleSoloTest()
+        {
+            if (Solo == null) return;
+            Solo.Toggle();
+            if (Solo.Active && RemoteControl == ControlLevel.Off) SetRemoteControl(ControlLevel.Browse); // so the ghost can press things
+            Toast(Solo.Active ? "Solo test on: a test ghost joined your room" : "Solo test off", ToastKind.Info);
+            dirty = true;
         }
 
         public bool TagsOn => Tags != null && Tags.Enabled;

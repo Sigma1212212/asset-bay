@@ -10,6 +10,7 @@
 
   Needs: `npx wrangler login` once (opens a browser), and the feed key from tools\sign (feed-keygen).
   Only upload videos you made or have the rights to.
+  Uploads are refused if they'd take storage past 9 GB (the free tier is 10 GB).
 #>
 param(
     [string[]] $Upload = @(),
@@ -29,6 +30,41 @@ if ($Deploy) {
     Write-Host "Deploying the Worker..." -ForegroundColor Cyan
     Push-Location $root
     try { Wrangler deploy } finally { Pop-Location }
+}
+
+# ---- 9 GB guard: R2's free tier is 10 GB of storage. Uploads are refused if they would take the
+#      bucket past 9 GB, so storage can never reach the paid tier. If the size can't be read, nothing is
+#      uploaded (fail safe). Note: Cloudflare's bucket metrics can lag a few minutes behind recent uploads.
+$LimitBytes = 9000000000
+
+function Get-BucketBytes {
+    $json = & node $wrangler r2 bucket info asset-bay-media --json 2>$null | Out-String
+    if ($LASTEXITCODE -ne 0) { throw "Couldn't read the bucket size from Cloudflare, so nothing was uploaded (9 GB guard)." }
+    $start = $json.IndexOf("{")
+    if ($start -lt 0) { throw "Unexpected answer from Cloudflare, so nothing was uploaded (9 GB guard)." }
+    $info = $json.Substring($start) | ConvertFrom-Json
+    # bucket_size looks like "1.23 GB" (decimal units, as printed by wrangler)
+    if ("$($info.bucket_size)" -notmatch '^\s*([\d.,]+)\s*([kMGTP]?B)\s*$') {
+        throw "Couldn't understand the bucket size '$($info.bucket_size)', so nothing was uploaded (9 GB guard)."
+    }
+    $number = [double]::Parse($Matches[1].Replace(",", ""), [Globalization.CultureInfo]::InvariantCulture)
+    $scale = @{ "B" = 1; "kB" = 1e3; "MB" = 1e6; "GB" = 1e9; "TB" = 1e12; "PB" = 1e15 }[$Matches[2]]
+    return [long]($number * $scale)
+}
+
+if ($Upload.Count -gt 0) {
+    $incoming = 0L
+    foreach ($file in $Upload) {
+        if (-not (Test-Path $file)) { throw "Not found: $file" }
+        $incoming += (Get-Item $file).Length
+    }
+    $current = Get-BucketBytes
+    $after = $current + $incoming
+    $fmt = { param($b) "{0:N2} GB" -f ($b / 1e9) }
+    Write-Host ("Storage: {0} used + {1} new = {2} of the 9 GB limit" -f (& $fmt $current), (& $fmt $incoming), (& $fmt $after)) -ForegroundColor DarkGray
+    if ($after -gt $LimitBytes) {
+        throw ("Upload refused: it would bring storage to {0}, past the 9 GB safety limit (free tier is 10 GB). Delete old videos first." -f (& $fmt $after))
+    }
 }
 
 foreach ($file in $Upload) {

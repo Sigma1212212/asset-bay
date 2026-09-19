@@ -93,6 +93,8 @@ namespace BundleMenu
         public BundleService Service { get; private set; }
         public AssetSpawner Spawner { get; private set; }
         public GunLib Gun { get; private set; }
+        public ModRunner Mods { get; private set; }
+        public Checkpoint Checkpoint { get; } = new Checkpoint();
         public MenuAnimator Animator { get; private set; }
         public MenuTheme CurrentTheme { get; private set; }
         public bool IsOpen => Animator != null && Animator.PanelTargetOpen;
@@ -201,6 +203,17 @@ namespace BundleMenu
             Gun.Register(new DeleteMode(Spawner));
             Gun.Register(new InspectMode());
             Gun.Register(new MeasureMode());
+
+            Mods = gameObject.AddComponent<ModRunner>();
+            Mods.Init(new ModContext
+            {
+                Player = GorillaTagPlayer.TryCreate(),
+                Rig = Rig as GorillaTagRig,
+                Theme = () => CurrentTheme,
+                GunUsesRightGrip = () => Gun != null && Gun.GunEnabled,
+                Toast = message => Toast(message, ToastKind.Info),
+            });
+            Mods.Changed += () => dirty = true;
 
             CurrentTheme = ResolveTheme(theme);
             BuildView();

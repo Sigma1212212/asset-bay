@@ -122,6 +122,22 @@ namespace BundleMenu
             }
         }
 
+        /// <summary>Held state of a controller face button (primary = A/X, secondary = B/Y).</summary>
+        public static bool XRButtonHeld(bool rightHand, bool primary)
+        {
+            try
+            {
+                var device = InputDevices.GetDeviceAtXRNode(rightHand ? XRNode.RightHand : XRNode.LeftHand);
+                if (!device.isValid) return false;
+                var usage = primary ? UnityEngine.XR.CommonUsages.primaryButton : UnityEngine.XR.CommonUsages.secondaryButton;
+                return device.TryGetFeatureValue(usage, out bool pressed) && pressed;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         /// <summary>Held state of a key, including KeyCode.Mouse0/1/2.</summary>
         public static bool KeyHeld(KeyCode key)
         {

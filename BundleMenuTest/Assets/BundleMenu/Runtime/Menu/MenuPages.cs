@@ -104,6 +104,17 @@ namespace BundleMenu
 
             rows.Add(new RowSpec
             {
+                Key = "mods",
+                Label = "Mods",
+                Value = !ctx.Mods.Available ? "Gorilla Tag only"
+                      : !ctx.Mods.Allowed ? "paused (public)"
+                      : $"{ctx.Mods.Mods.Count(m => m.Enabled)} on",
+                Light = !ctx.Mods.Available ? StatusLight.Idle : ctx.Mods.Allowed ? StatusLight.Ok : StatusLight.Error,
+                ShowChevron = true,
+                OnClick = () => ctx.Navigate(new ModsPage()),
+            });
+            rows.Add(new RowSpec
+            {
                 Key = "gun",
                 Label = "Gun",
                 Value = ctx.Gun.GunEnabled ? ctx.Gun.Mode?.Name ?? "on" : "off",
@@ -206,6 +217,71 @@ namespace BundleMenu
             }
             return rows;
         }
+    }
+
+    /// <summary>Movement mods for your own player, plus the lobby they're allowed in.</summary>
+    public sealed class ModsPage : MenuPage
+    {
+        public override string Title => "Mods";
+
+        public override List<RowSpec> BuildRows(BundleMenuController ctx)
+        {
+            var runner = ctx.Mods;
+            var rows = new List<RowSpec>();
+
+            if (!runner.Available)
+            {
+                rows.Add(RowSpec.Message("na", "These mods control your Gorilla Tag player, so they only work when the menu is loaded into Gorilla Tag."));
+                return rows;
+            }
+
+            rows.Add(new RowSpec
+            {
+                Key = "lobby", Label = "Lobby", Interactable = false,
+                Value = LobbyName(runner.Lobby),
+                Light = runner.Allowed ? StatusLight.Ok : StatusLight.Error,
+            });
+            if (!runner.Allowed)
+                rows.Add(RowSpec.Message("rule", "Mods are paused in public lobbies (they'd get your account banned). Join a private or modded room."));
+
+            foreach (var mod in runner.Mods)
+            {
+                var m = mod;
+                rows.Add(new RowSpec
+                {
+                    Key = "mod:" + m.Name,
+                    Label = m.Name,
+                    Value = m.Enabled ? m.Hint : "off",
+                    IsOn = m.Enabled,
+                    Light = m.Enabled ? StatusLight.Ok : StatusLight.Idle,
+                    Interactable = runner.Allowed || m.Enabled,
+                    OnClick = () => { ctx.Toast(runner.Toggle(m), ToastKind.Info); ctx.RefreshNow(); },
+                });
+            }
+
+            rows.Add(new RowSpec
+            {
+                Key = "cp-save", Label = "Save checkpoint", Value = ctx.Checkpoint.Saved ? "saved" : "",
+                Interactable = runner.Allowed,
+                OnClick = () => { ctx.Toast(ctx.Checkpoint.Save(runner.Context), ToastKind.Info); ctx.RefreshNow(); },
+            });
+            rows.Add(new RowSpec
+            {
+                Key = "cp-go", Label = "Return to checkpoint",
+                Interactable = runner.Allowed && ctx.Checkpoint.Saved,
+                OnClick = () => ctx.Toast(ctx.Checkpoint.Return(runner.Context, runner.Allowed), ToastKind.Info),
+            });
+            rows.Add(new RowSpec
+            {
+                Key = "alloff", Label = "All mods off",
+                OnClick = () => { runner.DisableAll(); ctx.Toast("All mods off", ToastKind.Info); ctx.RefreshNow(); },
+            });
+            return rows;
+        }
+
+        private static string LobbyName(LobbyKind k) =>
+            k == LobbyKind.Offline ? "offline" : k == LobbyKind.Private ? "private room"
+            : k == LobbyKind.Modded ? "modded room" : k == LobbyKind.Public ? "public - paused" : "-";
     }
 
     /// <summary>The gun: on/off, mode, and a live readout of what it's pointing at.</summary>

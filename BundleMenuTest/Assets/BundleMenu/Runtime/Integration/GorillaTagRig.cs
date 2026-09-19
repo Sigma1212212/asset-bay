@@ -78,6 +78,15 @@ namespace BundleMenu
             }
         }
 
+        public Transform RightHandTransform
+        {
+            get
+            {
+                if (rightHand == null) Refresh();
+                return rightHand;
+            }
+        }
+
         public IReadOnlyList<Transform> PokeTips
         {
             get

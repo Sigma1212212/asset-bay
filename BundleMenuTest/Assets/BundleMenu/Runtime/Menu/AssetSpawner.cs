@@ -52,6 +52,7 @@ namespace BundleMenu
 
             var go = Instantiate(prefab, position, rotation, Container);
             go.name = prefab.name;
+            FixMaterials(go);
             go.SetActive(true);
             go.AddComponent<SpawnPop>();
             list.Add(go);
@@ -80,6 +81,7 @@ namespace BundleMenu
 
                     var go = Instantiate(prefab, Container);
                     go.name = prefab.name;
+                    FixMaterials(go);
                     go.transform.position = SpawnPoint(viewer, Count);
                     go.transform.rotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
                     go.SetActive(true);
@@ -100,6 +102,41 @@ namespace BundleMenu
 
                 default:
                     return $"Loaded {asset.GetType().Name} '{asset.name}'";
+            }
+        }
+
+        private readonly List<Material> fixedMaterials = new List<Material>();
+        private Material litTemplate;
+
+        /// <summary>
+        /// Bundles built for a different render pipeline carry shaders the game doesn't have (they render pink).
+        /// Swap those for a copy of the game's own lit material, keeping each material's colour.
+        /// </summary>
+        public void FixMaterials(GameObject go)
+        {
+            foreach (var r in go.GetComponentsInChildren<Renderer>(true))
+            {
+                var mats = r.sharedMaterials;
+                bool changed = false;
+                for (int i = 0; i < mats.Length; i++)
+                {
+                    var m = mats[i];
+                    if (m != null && m.shader != null && m.shader.isSupported && m.shader.name != "Hidden/InternalErrorShader") continue;
+                    if (litTemplate == null)
+                    {
+                        var probe = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                        litTemplate = new Material(probe.GetComponent<Renderer>().sharedMaterial);
+                        DestroyImmediate(probe);
+                    }
+                    var color = m != null && m.HasProperty("_Color") ? m.GetColor("_Color") : Color.gray;
+                    var replacement = new Material(litTemplate) { name = (m != null ? m.name : "Material") + " (fixed)" };
+                    if (replacement.HasProperty("_Color")) replacement.SetColor("_Color", color);
+                    if (replacement.HasProperty("_BaseColor")) replacement.SetColor("_BaseColor", color);
+                    fixedMaterials.Add(replacement);
+                    mats[i] = replacement;
+                    changed = true;
+                }
+                if (changed) r.sharedMaterials = mats;
             }
         }
 
@@ -128,6 +165,8 @@ namespace BundleMenu
             // Ejecting the menu removes everything it put in the world.
             ClearAll();
             if (container != null) Destroy(container.gameObject);
+            foreach (var m in fixedMaterials) if (m != null) Destroy(m);
+            if (litTemplate != null) Destroy(litTemplate);
         }
 
         private List<GameObject> ListFor(string id)

@@ -31,3 +31,6 @@ release-key.pem
 backend/node_modules/
 backend/.wrangler/
 backend/test-seed/
+
+# Built bundles (published to R2, not git)
+build/

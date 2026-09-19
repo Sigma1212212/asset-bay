@@ -49,7 +49,9 @@ namespace BundleMenu
             for (int i = transform.childCount - 1; i >= 0; i--) Destroy(transform.GetChild(i).gameObject);
             rows.Clear();
 
-            float rowsHeight = rowsPerPage * RowHeight + (rowsPerPage - 1) * RowSpacing;
+            bool grid = theme.Layout == ThemeLayout.Grid;
+            int lines = grid ? Mathf.CeilToInt(rowsPerPage / 2f) : rowsPerPage;
+            float rowsHeight = lines * theme.RowHeight + (lines - 1) * theme.RowSpacing;
             float rowsTop = HeaderHeight + 18f;
             float footerTop = rowsTop + rowsHeight + 14f;
             float statusTop = footerTop + 52f + 8f;
@@ -78,6 +80,7 @@ namespace BundleMenu
                 var rim = UIFactory.Image(Panel, "Rim", UISprites.RoundedEdge(theme.PanelRadius, theme.EdgeWidth), Color.white);
                 rim.rectTransform.Stretch();
                 rim.gameObject.AddComponent<UIGradient>().Set(theme.EdgeTop, theme.EdgeBottom);
+                if (theme.Flicker > 0f) rim.gameObject.AddComponent<NeonFlicker>().Strength = theme.Flicker;
             }
 
             // --- header
@@ -107,14 +110,27 @@ namespace BundleMenu
 
             // --- rows
             var list = UIFactory.Rect("Rows", Panel).TopStrip(rowsTop, rowsHeight, Pad, Pad);
-            var layout = list.gameObject.AddComponent<VerticalLayoutGroup>();
-            layout.spacing = RowSpacing;
-            layout.childAlignment = TextAnchor.UpperCenter;
-            layout.childControlHeight = true;
-            layout.childControlWidth = true;
-            layout.childForceExpandHeight = false;
-            layout.childForceExpandWidth = true;
-            for (int i = 0; i < rowsPerPage; i++) rows.Add(RowView.Create(list, theme, RowHeight, i));
+            if (grid)
+            {
+                // Two columns of tiles.
+                var gridLayout = list.gameObject.AddComponent<GridLayoutGroup>();
+                gridLayout.cellSize = new Vector2((Width - Pad * 2f - theme.RowSpacing) / 2f, theme.RowHeight);
+                gridLayout.spacing = new Vector2(theme.RowSpacing, theme.RowSpacing);
+                gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+                gridLayout.constraintCount = 2;
+                gridLayout.childAlignment = TextAnchor.UpperCenter;
+            }
+            else
+            {
+                var layout = list.gameObject.AddComponent<VerticalLayoutGroup>();
+                layout.spacing = theme.RowSpacing;
+                layout.childAlignment = TextAnchor.UpperCenter;
+                layout.childControlHeight = true;
+                layout.childControlWidth = true;
+                layout.childForceExpandHeight = false;
+                layout.childForceExpandWidth = true;
+            }
+            for (int i = 0; i < rowsPerPage; i++) rows.Add(RowView.Create(list, theme, theme.RowHeight, i));
 
             // --- footer
             var footer = UIFactory.Rect("Footer", Panel).TopStrip(footerTop, 52f, Pad, Pad);

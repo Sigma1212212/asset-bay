@@ -271,6 +271,11 @@ namespace BundleMenu
 
             rows.Add(new RowSpec
             {
+                Key = "pack", Label = "Content pack", Value = tablet.ContentBundle != null ? "loaded" : "not published",
+                ShowChevron = true, OnClick = () => ctx.Navigate(new ContentPage()),
+            });
+            rows.Add(new RowSpec
+            {
                 Key = "style", Label = "Tablet style", Value = tablet.Style.name,
                 OnClick = () => { tablet.CycleStyle(+1); ctx.RefreshNow(); },
                 OnAltClick = () => { tablet.CycleStyle(-1); ctx.RefreshNow(); },
@@ -318,6 +323,41 @@ namespace BundleMenu
         {
             int i = System.Array.FindIndex(Volumes, v => UnityEngine.Mathf.Approximately(v, tablet.Volume));
             tablet.SetVolume(Volumes[((i < 0 ? 3 : i) + dir + Volumes.Length) % Volumes.Length]);
+        }
+    }
+
+    /// <summary>Props from the content pack. Tap one to spawn it in front of you (the gun's Place mode copies it).</summary>
+    public sealed class ContentPage : MenuPage
+    {
+        public override string Title => "Content pack";
+
+        public override List<RowSpec> BuildRows(BundleMenuController ctx)
+        {
+            var rows = new List<RowSpec>();
+            var bundle = ctx.Tablet.ContentBundle;
+            if (bundle == null)
+            {
+                rows.Add(RowSpec.Message("none", "No content pack yet. Publish build/bundles/content with publish-feed.ps1 and list it in feed.json (tablet)."));
+                return rows;
+            }
+            foreach (var path in bundle.GetAllAssetNames())
+            {
+                if (!path.EndsWith(".prefab")) continue;
+                string p = path;
+                string name = LocalBundleSource.Prettify(System.IO.Path.GetFileNameWithoutExtension(path));
+                rows.Add(new RowSpec
+                {
+                    Key = "prop:" + path, Label = name, Value = "spawn",
+                    OnClick = () =>
+                    {
+                        var prefab = bundle.LoadAsset<UnityEngine.GameObject>(p);
+                        ctx.Toast(prefab != null ? ctx.Spawner.Use(prefab, "content", ctx.Rig.Camera) : "Couldn't load " + name, ToastKind.Info);
+                    },
+                });
+            }
+            rows.Add(RowSpec.Info("styles", "Tablet styles", ctx.Tablet.Styles.Count.ToString()));
+            rows.Add(RowSpec.Info("themes", "Pack themes", ThemePresets.PackThemes.Count.ToString()));
+            return rows;
         }
     }
 

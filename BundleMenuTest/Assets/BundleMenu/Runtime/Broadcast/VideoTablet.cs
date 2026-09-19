@@ -30,12 +30,16 @@ namespace BundleMenu
         public float Volume { get; private set; } = 0.7f;
         public string Source { get; private set; } = "built-in";
         public TabletConfig Style => styles[styleIndex];
+        /// <summary>The loaded content pack (props, styles, themes), or null.</summary>
+        public AssetBundle ContentBundle => bundle;
         public IReadOnlyList<TabletConfig> Styles => styles;
 
         public Func<Camera> ViewCamera;
         public Func<MenuTheme> Theme;
         public Func<Transform> LeftHand, RightHand;
         public Action<string> Report;
+        /// <summary>Called with every TextAsset in a newly loaded content pack (the controller picks up themes).</summary>
+        public Action<TextAsset[]> PackLoaded;
 
         private readonly List<TabletConfig> styles = new List<TabletConfig>(TabletConfig.BuiltIn());
         private int styleIndex;
@@ -96,7 +100,9 @@ namespace BundleMenu
                 bundleHash = info.sha256;
 
                 int added = 0;
-                foreach (var asset in bundle.LoadAllAssets<TextAsset>())
+                var texts = bundle.LoadAllAssets<TextAsset>();
+                PackLoaded?.Invoke(texts);
+                foreach (var asset in texts)
                 {
                     if (!asset.name.StartsWith("tablet-", StringComparison.OrdinalIgnoreCase)) continue;
                     var config = TabletConfig.Parse(asset.text);

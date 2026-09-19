@@ -231,6 +231,7 @@ namespace BundleMenu
             Tablet.ViewCamera = () => Rig.Camera;
             Tablet.Theme = () => CurrentTheme;
             Tablet.Report = message => { Toast(message, ToastKind.Info); dirty = true; };
+            Tablet.PackLoaded = LoadPackThemes;
             Tablet.LeftHand = () => (Rig as GorillaTagRig)?.WristAnchor;
             Tablet.RightHand = () => (Rig as GorillaTagRig)?.RightHandTransform;
             Screens = gameObject.AddComponent<BroadcastScreens>();
@@ -451,7 +452,9 @@ namespace BundleMenu
             if (animate)
             {
                 var items = target.ShowRows(slice);
-                anim.PlayEntrance(items, EntranceLibrary.Get(entrance), stagger, delay);
+                // A theme can prefer its own entrance (Arcade pops, Minimal slides...).
+                var style = CurrentTheme.EntranceOverride >= 0 ? (EntranceStyle)CurrentTheme.EntranceOverride : entrance;
+                anim.PlayEntrance(items, EntranceLibrary.Get(style), stagger, delay);
             }
             else if (target.Matches(slice))
             {
@@ -656,16 +659,51 @@ namespace BundleMenu
             Render(animate: true, delay: 0.06f);
         }
 
+        private int packTheme = -1; // index into ThemePresets.PackThemes, or -1 for a built-in preset
+
         public void CycleTheme(int dir)
         {
             var values = ((ThemePreset[])Enum.GetValues(typeof(ThemePreset)))
                 .Where(t => t != ThemePreset.Custom || customTheme != null).ToArray();
-            int i = Array.IndexOf(values, theme);
-            SetTheme(values[((i < 0 ? 0 : i) + dir + values.Length) % values.Length]);
+            int total = values.Length + ThemePresets.PackThemes.Count;
+            int current = packTheme >= 0 ? values.Length + packTheme : Array.IndexOf(values, theme);
+            int next = ((current < 0 ? 0 : current) + dir + total) % total;
+            if (next < values.Length) SetTheme(values[next]);
+            else SetPackTheme(next - values.Length);
+        }
+
+        public void SetPackTheme(int index)
+        {
+            if (index < 0 || index >= ThemePresets.PackThemes.Count) return;
+            packTheme = index;
+            CurrentTheme = ThemePresets.PackThemes[index];
+            BuildView();
+            ApplyPanelProgress(Animator.PanelProgress, Animator.PanelTargetOpen);
+            if (IsOpen) Render(animate: true);
+            Toast($"Theme: {CurrentTheme.DisplayName}", ToastKind.Info);
+        }
+
+        private void LoadPackThemes(TextAsset[] assets)
+        {
+            int added = 0;
+            foreach (var asset in assets)
+            {
+                if (!asset.name.StartsWith("theme-", StringComparison.OrdinalIgnoreCase)) continue;
+                try
+                {
+                    var t = ThemePresets.FromJson(asset.text);
+                    ThemePresets.PackThemes.RemoveAll(x => x.DisplayName == t.DisplayName);
+                    ThemePresets.PackThemes.Add(t);
+                    added++;
+                }
+                catch (Exception e) { Debug.LogWarning($"[BundleMenu] Bad theme {asset.name}: {e.Message}"); }
+            }
+            if (added > 0) Toast($"{added} themes added from the content pack", ToastKind.Info);
         }
 
         public void SetTheme(ThemePreset preset)
         {
+            packTheme = -1;
             theme = preset;
             CurrentTheme = ResolveTheme(theme);
             SavePrefs();

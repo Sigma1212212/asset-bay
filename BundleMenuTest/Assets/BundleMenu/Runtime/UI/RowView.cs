@@ -60,8 +60,11 @@ namespace BundleMenu
             statusLight = UIFactory.Image(body, "Light", UISprites.Glyph(Icon.Dot), t.StatusIdle);
             statusLight.rectTransform.Pin(new Vector2(0, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(22, 0), new Vector2(11, 11));
 
-            label = UIFactory.Text(body, "Label", t, 21, TextAlignmentOptions.MidlineLeft, t.Text, t.LabelStyle, t.LabelSpacing);
-            value = UIFactory.Text(body, "Value", t, 15, TextAlignmentOptions.MidlineRight, t.SubText, t.LabelStyle, t.LabelSpacing * 0.5f);
+            label = UIFactory.Text(body, "Label", t, t.LabelSize, TextAlignmentOptions.MidlineLeft, t.Text, t.LabelStyle, t.LabelSpacing);
+            value = UIFactory.Text(body, "Value", t, t.ValueSize, TextAlignmentOptions.MidlineRight, t.SubText, t.LabelStyle, t.LabelSpacing * 0.5f);
+            if (t.Layout == ThemeLayout.Grid) label.enableAutoSizing = true; // tiles are narrower
+            label.fontSizeMin = 11f;
+            label.fontSizeMax = t.LabelSize;
 
             chevron = UIFactory.Image(body, "Chevron", UISprites.Glyph(Icon.ChevronRight), t.SubText);
             chevron.rectTransform.Pin(new Vector2(1, 0.5f), new Vector2(1, 0.5f), new Vector2(-12, 0), new Vector2(18, 18));
@@ -80,7 +83,7 @@ namespace BundleMenu
             gameObject.name = "Row: " + s.Label;
 
             label.text = s.Label ?? "";
-            label.fontSize = s.Multiline ? 15f : 21f;
+            if (!label.enableAutoSizing) label.fontSize = s.Multiline ? 15f : theme.LabelSize;
             label.enableWordWrapping = s.Multiline;
             label.lineSpacing = s.Multiline ? -12f : 0f;
             value.text = s.Value ?? "";

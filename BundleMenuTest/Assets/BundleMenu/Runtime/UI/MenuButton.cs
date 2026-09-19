@@ -36,6 +36,7 @@ namespace BundleMenu
         private SelectionState visualState = SelectionState.Normal;
         private Color fillTarget, edgeTarget;
         private float scaleTarget = 1f, scale = 1f, scaleVelocity;
+        private float slideTarget, slide;
         private float lastClickTime = -1f;
 
         public void Init(MenuTheme theme, Image fill, Image edge)
@@ -145,7 +146,12 @@ namespace BundleMenu
             switch (visualState)
             {
                 case SelectionState.Highlighted:
-                    fill = Theme.ButtonFillHover; edge = Theme.ButtonEdgeHover; scaleTarget = HoverScale; break;
+                    fill = Theme.ButtonFillHover; edge = Theme.ButtonEdgeHover;
+                    // The theme decides how hovering feels: grow, slide sideways, or only light up.
+                    bool wide = ((RectTransform)transform).rect.width > 150f;
+                    scaleTarget = Theme.Hover == HoverStyle.Grow || !wide ? HoverScale : 1f;
+                    slideTarget = Theme.Hover == HoverStyle.Slide && wide ? 10f : 0f;
+                    break;
                 case SelectionState.Pressed:
                     fill = Theme.ButtonFillPressed; edge = Theme.ButtonEdgeHover; scaleTarget = PressScale; break;
                 case SelectionState.Selected:
@@ -162,6 +168,7 @@ namespace BundleMenu
                 edge.a = Mathf.Max(edge.a, 0.55f);
             }
 
+            if (visualState != SelectionState.Highlighted) slideTarget = 0f;
             fillTarget = fill;
             edgeTarget = edge;
 
@@ -184,6 +191,10 @@ namespace BundleMenu
             scaleVelocity += ((scaleTarget - scale) * stiffness - scaleVelocity * damping) * dt;
             scale += scaleVelocity * dt;
             transform.localScale = new Vector3(scale, scale, 1f);
+
+            slide = Mathf.Lerp(slide, slideTarget, k);
+            if (Mathf.Abs(slide) > 0.01f || slideTarget != 0f)
+                ((RectTransform)transform).anchoredPosition = new Vector2(slide, ((RectTransform)transform).anchoredPosition.y);
         }
     }
 }

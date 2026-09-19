@@ -4,7 +4,14 @@ using UnityEngine;
 
 namespace BundleMenu
 {
-    public enum ThemePreset { Halo, Solstice, Circuit, Velvet, Custom }
+    // New presets go after Custom so the numbers already saved in players' settings keep meaning the same theme.
+    public enum ThemePreset { Halo, Solstice, Circuit, Velvet, Custom, Arcade, Glass, Minimal, Neon }
+
+    /// <summary>How rows are arranged: a single column, or two columns of tiles.</summary>
+    public enum ThemeLayout { List, Grid }
+
+    /// <summary>What a button does when you hover it.</summary>
+    public enum HoverStyle { Grow, Slide, Glow }
 
     /// <summary>
     /// Everything visual about the menu. Create your own via Assets > Create > Bundle Menu > Theme,
@@ -48,6 +55,18 @@ namespace BundleMenu
         public float LabelSpacing = 0.5f;
         public float TitleSpacing = 1f;
 
+        [Header("Behaviour")]
+        public ThemeLayout Layout = ThemeLayout.List;
+        public HoverStyle Hover = HoverStyle.Grow;
+        public float RowHeight = 56f;
+        public float RowSpacing = 8f;
+        public float LabelSize = 21f;
+        public float ValueSize = 15f;
+        [Tooltip("0 = steady. Above 0, the rim and edges flicker like neon tubes.")]
+        [Range(0, 1)] public float Flicker;
+        [Tooltip("Entrance animation this theme prefers (-1 = use the menu setting).")]
+        public int EntranceOverride = -1;
+
         [Header("Status lights")]
         public Color StatusIdle = Hex(0x5A6290);
         public Color StatusBusy = Hex(0xFFB547);
@@ -68,6 +87,26 @@ namespace BundleMenu
     /// <summary>The four built-in looks. Original designs; none are copies of existing menus.</summary>
     public static class ThemePresets
     {
+        /// <summary>Themes added by the content bundle (theme-*.json), shown after the built-in ones.</summary>
+        public static readonly System.Collections.Generic.List<MenuTheme> PackThemes = new System.Collections.Generic.List<MenuTheme>();
+
+        /// <summary>
+        /// A theme from JSON. Starts from Halo, so a pack theme only needs the fields it changes.
+        /// Colours are {"r":1,"g":0.5,"b":0,"a":1}; export a built-in theme with the editor tool to get a template.
+        /// </summary>
+        public static MenuTheme FromJson(string json)
+        {
+            var t = Create(ThemePreset.Halo);
+            JsonUtility.FromJsonOverwrite(json, t);
+            t.hideFlags = HideFlags.DontSave;
+            t.RowHeight = Mathf.Clamp(t.RowHeight, 32f, 96f);
+            t.RowSpacing = Mathf.Clamp(t.RowSpacing, 0f, 24f);
+            t.LabelSize = Mathf.Clamp(t.LabelSize, 10f, 32f);
+            t.ValueSize = Mathf.Clamp(t.ValueSize, 8f, 24f);
+            if (string.IsNullOrEmpty(t.DisplayName)) t.DisplayName = "Pack theme";
+            return t;
+        }
+
         public static MenuTheme Create(ThemePreset preset)
         {
             var t = ScriptableObject.CreateInstance<MenuTheme>();
@@ -140,6 +179,77 @@ namespace BundleMenu
                     t.TitleStyle = FontStyles.SmallCaps | FontStyles.Bold; t.TitleSpacing = 3f;
                     t.StatusIdle = MenuTheme.Hex(0x6B3A52); t.StatusBusy = MenuTheme.Hex(0xF2C14E);
                     t.StatusOk = MenuTheme.Hex(0x7EE0A1); t.StatusError = MenuTheme.Hex(0xFF6B6B);
+                    break;
+
+                // Arcade: chunky two-column tiles, bold caps, a bouncy pop-in.
+                case ThemePreset.Arcade:
+                    t.DisplayName = "Arcade";
+                    t.PanelTop = MenuTheme.Hex(0x2A1B5E); t.PanelBottom = MenuTheme.Hex(0x120A2E);
+                    t.EdgeTop = MenuTheme.Hex(0xFFD23F); t.EdgeBottom = MenuTheme.Hex(0xFF3F81);
+                    t.EdgeWidth = 4f; t.PanelRadius = 20f; t.GlowStrength = 0.4f;
+                    t.Accent = MenuTheme.Hex(0xFFD23F); t.Accent2 = MenuTheme.Hex(0xFF3F81);
+                    t.ButtonRadius = 16f;
+                    t.ButtonFill = MenuTheme.Hex(0x3D2A8A); t.ButtonFillHover = MenuTheme.Hex(0x5A3FC0);
+                    t.ButtonFillPressed = MenuTheme.Hex(0xFF3F81);
+                    t.ButtonEdge = MenuTheme.Hex(0xFFD23F, 0.5f); t.ButtonEdgeHover = MenuTheme.Hex(0xFFD23F);
+                    t.ButtonEdgeWidth = 3f;
+                    t.Text = MenuTheme.Hex(0xFFF6D6); t.SubText = MenuTheme.Hex(0xC9B8FF);
+                    t.LabelStyle = FontStyles.UpperCase | FontStyles.Bold; t.TitleStyle = FontStyles.UpperCase | FontStyles.Bold;
+                    t.LabelSpacing = 2f; t.TitleSpacing = 4f;
+                    t.Layout = ThemeLayout.Grid; t.Hover = HoverStyle.Grow;
+                    t.RowHeight = 64f; t.RowSpacing = 10f; t.LabelSize = 17f; t.ValueSize = 13f;
+                    t.EntranceOverride = (int)EntranceStyle.Pop;
+                    break;
+
+                // Glass: see-through frosted panel, soft white edges, light text.
+                case ThemePreset.Glass:
+                    t.DisplayName = "Glass";
+                    t.PanelTop = MenuTheme.Hex(0xFFFFFF, 0.16f); t.PanelBottom = MenuTheme.Hex(0xB8C8FF, 0.10f);
+                    t.EdgeTop = MenuTheme.Hex(0xFFFFFF, 0.75f); t.EdgeBottom = MenuTheme.Hex(0xFFFFFF, 0.2f);
+                    t.EdgeWidth = 1.5f; t.PanelRadius = 28f; t.GlowStrength = 0.12f;
+                    t.Accent = MenuTheme.Hex(0x9FE7FF); t.Accent2 = MenuTheme.Hex(0xE0B8FF);
+                    t.ButtonRadius = 18f;
+                    t.ButtonFill = MenuTheme.Hex(0xFFFFFF, 0.10f); t.ButtonFillHover = MenuTheme.Hex(0xFFFFFF, 0.22f);
+                    t.ButtonFillPressed = MenuTheme.Hex(0xFFFFFF, 0.32f);
+                    t.ButtonEdge = MenuTheme.Hex(0xFFFFFF, 0.25f); t.ButtonEdgeHover = MenuTheme.Hex(0xFFFFFF, 0.8f);
+                    t.Text = MenuTheme.Hex(0xFFFFFF); t.SubText = MenuTheme.Hex(0xDDE6FF, 0.75f);
+                    t.Hover = HoverStyle.Glow;
+                    t.EntranceOverride = (int)EntranceStyle.Fade;
+                    break;
+
+                // Minimal: no boxes, just text rows with a thin accent line; hovering slides the row.
+                case ThemePreset.Minimal:
+                    t.DisplayName = "Minimal";
+                    t.PanelTop = MenuTheme.Hex(0x111214); t.PanelBottom = MenuTheme.Hex(0x111214);
+                    t.EdgeWidth = 0f; t.PanelRadius = 10f; t.GlowStrength = 0f;
+                    t.Accent = MenuTheme.Hex(0xF2F2F2); t.Accent2 = MenuTheme.Hex(0x8A8A8A);
+                    t.ButtonRadius = 4f;
+                    t.ButtonFill = MenuTheme.Hex(0xFFFFFF, 0f); t.ButtonFillHover = MenuTheme.Hex(0xFFFFFF, 0.05f);
+                    t.ButtonFillPressed = MenuTheme.Hex(0xFFFFFF, 0.1f);
+                    t.ButtonEdge = MenuTheme.Hex(0xFFFFFF, 0f); t.ButtonEdgeHover = MenuTheme.Hex(0xFFFFFF, 0f);
+                    t.Text = MenuTheme.Hex(0xEDEDED); t.SubText = MenuTheme.Hex(0x7A7A7A);
+                    t.Hover = HoverStyle.Slide;
+                    t.RowHeight = 44f; t.RowSpacing = 2f; t.LabelSize = 19f; t.ValueSize = 14f;
+                    t.EntranceOverride = (int)EntranceStyle.SlideRight;
+                    t.StatusIdle = MenuTheme.Hex(0x3A3A3A);
+                    break;
+
+                // Neon: black glass, hot pink / cyan tubes that flicker, outlined rows.
+                case ThemePreset.Neon:
+                    t.DisplayName = "Neon";
+                    t.PanelTop = MenuTheme.Hex(0x07030D); t.PanelBottom = MenuTheme.Hex(0x02010A);
+                    t.EdgeTop = MenuTheme.Hex(0xFF2BD6); t.EdgeBottom = MenuTheme.Hex(0x22E4FF);
+                    t.EdgeWidth = 2.5f; t.PanelRadius = 16f; t.GlowStrength = 0.6f;
+                    t.Accent = MenuTheme.Hex(0xFF2BD6); t.Accent2 = MenuTheme.Hex(0x22E4FF);
+                    t.ButtonRadius = 12f;
+                    t.ButtonFill = MenuTheme.Hex(0x0E0620, 0.9f); t.ButtonFillHover = MenuTheme.Hex(0x1B0B3A);
+                    t.ButtonFillPressed = MenuTheme.Hex(0x2A0F55);
+                    t.ButtonEdge = MenuTheme.Hex(0x22E4FF, 0.55f); t.ButtonEdgeHover = MenuTheme.Hex(0xFF2BD6);
+                    t.ButtonEdgeWidth = 2f;
+                    t.Text = MenuTheme.Hex(0xF4E9FF); t.SubText = MenuTheme.Hex(0x9A7FC2);
+                    t.LabelSpacing = 1.5f; t.TitleStyle = FontStyles.Bold | FontStyles.Italic;
+                    t.Hover = HoverStyle.Glow; t.Flicker = 0.6f;
+                    t.EntranceOverride = (int)EntranceStyle.Cascade;
                     break;
 
                 default:

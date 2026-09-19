@@ -259,9 +259,28 @@ namespace BundleMenu
                     OnClick = () => { Step(tablet, +1); ctx.RefreshNow(); },
                     OnAltClick = () => { Step(tablet, -1); ctx.RefreshNow(); },
                 });
+                rows.Add(new RowSpec
+                {
+                    Key = "throw", Label = tablet.IsThrown ? "Recall tablet" : "Throw tablet",
+                    Value = UnityEngine.XR.XRSettings.isDeviceActive ? "or grab it" : "or press T",
+                    OnClick = () => { if (tablet.IsThrown) tablet.Recall(); else tablet.Throw(); ctx.RefreshNow(); },
+                });
                 rows.Add(new RowSpec { Key = "close", Label = "Put tablet away", Value = tablet.Source,
                     OnClick = () => { tablet.Close(); ctx.RefreshNow(); } });
             }
+
+            rows.Add(new RowSpec
+            {
+                Key = "style", Label = "Tablet style", Value = tablet.Style.name,
+                OnClick = () => { tablet.CycleStyle(+1); ctx.RefreshNow(); },
+                OnAltClick = () => { tablet.CycleStyle(-1); ctx.RefreshNow(); },
+            });
+            rows.Add(new RowSpec
+            {
+                Key = "size", Label = "Tablet size", Value = $"x{tablet.SizeMultiplier:0.#}",
+                OnClick = () => { tablet.CycleSize(+1); ctx.RefreshNow(); },
+                OnAltClick = () => { tablet.CycleSize(-1); ctx.RefreshNow(); },
+            });
 
             var videos = feed?.Current?.videos;
             if (videos == null || videos.Length == 0)

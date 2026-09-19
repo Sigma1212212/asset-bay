@@ -231,6 +231,8 @@ namespace BundleMenu
             Tablet.ViewCamera = () => Rig.Camera;
             Tablet.Theme = () => CurrentTheme;
             Tablet.Report = message => { Toast(message, ToastKind.Info); dirty = true; };
+            Tablet.LeftHand = () => (Rig as GorillaTagRig)?.WristAnchor;
+            Tablet.RightHand = () => (Rig as GorillaTagRig)?.RightHandTransform;
             Screens = gameObject.AddComponent<BroadcastScreens>();
             Screens.ScreensEnabled = broadcastScreens;
             Screens.ViewCamera = () => Rig.Camera;

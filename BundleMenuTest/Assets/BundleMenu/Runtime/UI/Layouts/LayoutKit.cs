@@ -109,13 +109,16 @@ namespace BundleMenu
             float d = T.ButtonDepth;
             if (d <= 0f) return b;
             var rt = (RectTransform)b.transform;
-            var lip = UIFactory.Image(rt.parent, b.name + " Base", UISprites.RoundedFill(radius), LipColor(T));
-            var lrt = lip.rectTransform;
-            lrt.anchorMin = rt.anchorMin; lrt.anchorMax = rt.anchorMax; lrt.pivot = rt.pivot;
-            lrt.sizeDelta = rt.sizeDelta;
-            lrt.anchoredPosition = rt.anchoredPosition + new Vector2(0f, -d);
-            lrt.SetSiblingIndex(rt.GetSiblingIndex());
-            b.Base = lip.gameObject;
+            // A holder exactly where the key is; the base and its shadow hang below it inside.
+            var holder = UIFactory.Rect(b.name + " Base", rt.parent);
+            holder.anchorMin = rt.anchorMin; holder.anchorMax = rt.anchorMax; holder.pivot = rt.pivot;
+            holder.sizeDelta = rt.sizeDelta;
+            holder.anchoredPosition = rt.anchoredPosition;
+            holder.SetSiblingIndex(rt.GetSiblingIndex());
+            Bevel.Base(holder, T, radius, d);
+            Bevel.Face(rt, T, radius);
+            Bevel.Block(rt, T, radius, d);
+            b.Base = holder.gameObject;
             b.PressDepth = d;
             Lift(rt, d);
             return b;

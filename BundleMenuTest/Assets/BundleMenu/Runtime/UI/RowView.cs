@@ -61,11 +61,7 @@ namespace BundleMenu
             // Every boxed look stands on a darker base peeking out underneath; pressing sinks the row onto it.
             // Tiles are chunkier. Borderless looks (Box, Switch) stay flat on the panel.
             float depth = look == RowLook.Tile ? Mathf.Max(5f, t.ButtonDepth) : look == RowLook.Box || look == RowLook.Switch ? 0f : t.ButtonDepth;
-            if (depth > 0f)
-            {
-                var lip = UIFactory.Image(Visual, "Lip", UISprites.RoundedFill(r), LayoutKit.LipColor(t));
-                lip.rectTransform.Stretch(0, depth, 0, -depth);
-            }
+            if (depth > 0f) Bevel.Base(Visual, t, r, depth);
 
             var fill = UIFactory.Image(Visual, "Body", UISprites.RoundedFill(r), t.ButtonFill, raycast: true);
             fill.rectTransform.Stretch();
@@ -125,6 +121,11 @@ namespace BundleMenu
             Button.FillAlpha = look == RowLook.Box ? 0.3f : look == RowLook.Switch ? 0.15f : 1f;
             Button.PressDepth = depth;
             Button.Init(t, fill, edge);
+            if (depth > 0f)
+            {
+                Bevel.Face(body, t, r);
+                Bevel.Block((RectTransform)body, t, r, depth);
+            }
         }
 
         public void Apply(RowSpec s)

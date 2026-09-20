@@ -127,6 +127,11 @@ namespace BundleMenu
                 Key = "spawn", Label = "Spawn", Value = ctx.Spawner.Count > 0 ? ctx.Spawner.Count + " out" : "",
                 ShowChevron = true, OnClick = () => ctx.Navigate(new SpawnPage()),
             });
+            rows.Add(new RowSpec
+            {
+                Key = "props", Label = "Props", Value = PropLibrary.All.Count + " built in",
+                ShowChevron = true, OnClick = () => ctx.Navigate(new PropsPage()),
+            });
             if (ctx.Presence != null)
                 rows.Add(new RowSpec
                 {
@@ -498,6 +503,13 @@ namespace BundleMenu
                 Value = LobbyName(runner.Lobby),
                 Light = runner.Allowed ? StatusLight.Ok : StatusLight.Error,
             });
+            rows.Add(new RowSpec
+            {
+                Key = "controls", Label = "Controls",
+                Value = MenuInput.VRActive ? "controller buttons" : "keyboard keys",
+                ShowChevron = true,
+                OnClick = () => ctx.Navigate(new ControlsPage()),
+            });
             if (!runner.Allowed)
                 rows.Add(RowSpec.Message("rule", "Mods are paused in public lobbies (they'd get your account banned). Join a private or modded room."));
 
@@ -508,11 +520,13 @@ namespace BundleMenu
                 {
                     Key = "mod:" + m.Name,
                     Label = m.Name,
-                    Value = m.Enabled ? m.Hint : "off",
+                    Value = m.Enabled ? m.Hint : m.ControlText,
                     IsOn = m.Enabled,
                     Light = m.Enabled ? StatusLight.Ok : StatusLight.Idle,
                     Interactable = runner.Allowed || m.Enabled,
                     OnClick = () => { ctx.Toast(runner.Toggle(m), ToastKind.Info); ctx.RefreshNow(); },
+                    OnSecondary = () => { runner.Binds.Listen(m.Bind, MenuInput.VRActive); ctx.RefreshNow(); },
+                    SecondaryIcon = Icon.Gear,
                 });
 
                 if (!m.Enabled) continue;
@@ -567,6 +581,7 @@ namespace BundleMenu
 
             var gun = ctx.Gun;
             var mode = gun.Mode;
+            bool vr = MenuInput.VRActive;
             var rows = new List<RowSpec>
             {
                 new RowSpec
@@ -577,16 +592,46 @@ namespace BundleMenu
                 },
                 new RowSpec
                 {
-                    Key = "mode", Label = "Mode", Value = mode?.Name ?? "-",
+                    Key = "mode", Label = "Mode",
+                    Value = (mode?.Name ?? "-") + $"  ({gun.ModeIndex + 1}/{gun.Modes.Count})",
                     OnClick = () => { gun.CycleMode(+1); ctx.RefreshNow(); },
                     OnAltClick = () => { gun.CycleMode(-1); ctx.RefreshNow(); },
                 },
                 RowSpec.Info("target", gun.Aiming ? "Aiming" : "Target",
                     gun.Aiming && mode != null ? mode.Describe(gun.Current) : mode?.Describe(default) ?? ""),
-                RowSpec.Message("how", MenuInput.VRActive
-                    ? "Hold the right grip to aim, pull the right trigger to fire."
-                    : "Hold right mouse to aim, left-click to fire. Doesn't fire while the cursor is on the menu."),
             };
+            if (mode != null && !string.IsNullOrEmpty(mode.Hint)) rows.Add(RowSpec.Message("hint", mode.Hint));
+
+            if (mode is PropGunMode props)
+                rows.Add(new RowSpec
+                {
+                    Key = "prop", Label = "   Prop", Value = props.Chosen?.Name ?? "-",
+                    OnClick = () => { props.Cycle(+1); ctx.RefreshNow(); },
+                    OnAltClick = () => { props.Cycle(-1); ctx.RefreshNow(); },
+                });
+            if (mode is PaintMode paint)
+                rows.Add(new RowSpec { Key = "wipe", Label = "   Wipe the paint off", OnClick = () => { paint.Clear(); ctx.RefreshNow(); } });
+
+            rows.Add(new RowSpec
+            {
+                Key = "aim", Label = "Aim with", Value = vr ? "your hand" : gun.Aim == GunAim.Mouse ? "the mouse" : "the middle of the screen",
+                Interactable = !vr,
+                OnClick = () => { gun.SetAim(gun.Aim == GunAim.Mouse ? GunAim.Crosshair : GunAim.Mouse); ctx.RefreshNow(); },
+            });
+            rows.Add(new RowSpec
+            {
+                Key = "aimkey", Label = "Hold to aim", Value = gun.Rebinding ? "press a key" : vr ? "right grip" : ModBind.Pretty(gun.AimKey),
+                Interactable = !vr,
+                OnClick = () => { gun.ListenForAimKey(); ctx.RefreshNow(); },
+            });
+            rows.Add(new RowSpec
+            {
+                Key = "model", Label = "Show the gun in your hand", Value = gun.ShowModel ? "on" : "off", IsOn = gun.ShowModel,
+                OnClick = () => { gun.SetModelVisible(!gun.ShowModel); ctx.RefreshNow(); },
+            });
+            rows.Add(RowSpec.Message("how", vr
+                ? "Hold the right grip to aim, pull the right trigger to fire."
+                : "Hold the aim key and left-click to fire. It won't fire while the cursor is on the menu."));
             return rows;
         }
     }

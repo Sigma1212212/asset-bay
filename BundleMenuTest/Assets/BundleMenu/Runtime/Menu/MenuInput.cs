@@ -92,12 +92,20 @@ namespace BundleMenu
             {
 #if ENABLE_INPUT_SYSTEM
                 var mouse = Mouse.current;
-                if (mouse != null) return Mathf.Sign(mouse.scroll.ReadValue().y) * (Mathf.Abs(mouse.scroll.ReadValue().y) > 0.01f ? 1f : 0f);
+                if (mouse != null)
+                {
+                    float wheel = mouse.scroll.ReadValue().y;
+                    return Mathf.Abs(wheel) > 0.01f ? Mathf.Sign(wheel) : 0f;
+                }
 #endif
 #if ENABLE_LEGACY_INPUT_MANAGER || !ENABLE_INPUT_SYSTEM
                 if (!legacyBroken)
                 {
-                    try { return Mathf.Sign(Input.mouseScrollDelta.y) * (Mathf.Abs(Input.mouseScrollDelta.y) > 0.01f ? 1f : 0f); }
+                    try
+                    {
+                        float wheel = Input.mouseScrollDelta.y;
+                        return Mathf.Abs(wheel) > 0.01f ? Mathf.Sign(wheel) : 0f;
+                    }
                     catch (InvalidOperationException) { legacyBroken = true; }
                 }
 #endif
@@ -161,6 +169,90 @@ namespace BundleMenu
             return false;
         }
 
+        /// <summary>
+        /// The key (or mouse button) pressed this frame, for re-binding controls. Modifier keys on their
+        /// own are ignored so holding shift while picking doesn't steal the binding.
+        /// </summary>
+        public static bool AnyKeyDown(out KeyCode key)
+        {
+            key = KeyCode.None;
+
+            for (int i = 0; i < 3; i++)
+                if (MouseDown(i)) { key = KeyCode.Mouse0 + i; return true; }
+
+#if ENABLE_INPUT_SYSTEM
+            var kb = Keyboard.current;
+            if (kb != null)
+            {
+                foreach (var control in kb.allKeys)
+                {
+                    if (!control.wasPressedThisFrame) continue;
+                    if (!TryUnmap(control.keyCode, out key)) continue;
+                    return true;
+                }
+            }
+#endif
+#if ENABLE_LEGACY_INPUT_MANAGER || !ENABLE_INPUT_SYSTEM
+            if (!legacyBroken)
+            {
+                try
+                {
+                    if (!Input.anyKeyDown) return false;
+                    foreach (var code in Bindable)
+                        if (Input.GetKeyDown(code)) { key = code; return true; }
+                }
+                catch (InvalidOperationException) { legacyBroken = true; }
+            }
+#endif
+            return false;
+        }
+
+        /// <summary>Rising edge of a mouse button.</summary>
+        public static bool MouseDown(int button)
+        {
+#if ENABLE_INPUT_SYSTEM
+            var mouse = Mouse.current;
+            if (mouse != null)
+                return button == 0 ? mouse.leftButton.wasPressedThisFrame
+                     : button == 1 ? mouse.rightButton.wasPressedThisFrame
+                                   : mouse.middleButton.wasPressedThisFrame;
+#endif
+#if ENABLE_LEGACY_INPUT_MANAGER || !ENABLE_INPUT_SYSTEM
+            if (!legacyBroken)
+            {
+                try { return Input.GetMouseButtonDown(button); }
+                catch (InvalidOperationException) { legacyBroken = true; }
+            }
+#endif
+            return false;
+        }
+
+        /// <summary>Keys worth offering as controls (built once, in the order people expect).</summary>
+        private static KeyCode[] bindable;
+        private static KeyCode[] Bindable
+        {
+            get
+            {
+                if (bindable != null) return bindable;
+                var list = new List<KeyCode>(128);
+                for (var code = KeyCode.A; code <= KeyCode.Z; code++) list.Add(code);
+                for (var code = KeyCode.Alpha0; code <= KeyCode.Alpha9; code++) list.Add(code);
+                for (var code = KeyCode.F1; code <= KeyCode.F12; code++) list.Add(code);
+                for (var code = KeyCode.Keypad0; code <= KeyCode.KeypadEquals; code++) list.Add(code);
+                list.AddRange(new[]
+                {
+                    KeyCode.Space, KeyCode.Tab, KeyCode.Return, KeyCode.LeftShift, KeyCode.RightShift,
+                    KeyCode.LeftControl, KeyCode.RightControl, KeyCode.LeftAlt, KeyCode.RightAlt,
+                    KeyCode.UpArrow, KeyCode.DownArrow, KeyCode.LeftArrow, KeyCode.RightArrow,
+                    KeyCode.Insert, KeyCode.Home, KeyCode.End, KeyCode.PageUp, KeyCode.PageDown,
+                    KeyCode.Minus, KeyCode.Equals, KeyCode.LeftBracket, KeyCode.RightBracket,
+                    KeyCode.Semicolon, KeyCode.Quote, KeyCode.Comma, KeyCode.Period, KeyCode.Slash,
+                    KeyCode.Backslash, KeyCode.BackQuote, KeyCode.CapsLock,
+                });
+                return bindable = list.ToArray();
+            }
+        }
+
         /// <summary>True when a VR headset is actually running (as opposed to desktop / PC mode).</summary>
         public static bool VRActive
         {
@@ -217,6 +309,23 @@ namespace BundleMenu
         }
 
 #if ENABLE_INPUT_SYSTEM
+        private static bool TryUnmap(Key key, out KeyCode code)
+        {
+            string name = key.ToString();
+            if (name.StartsWith("Digit")) name = "Alpha" + name.Substring(5);
+            else if (name.StartsWith("Numpad") && name.Length == 7 && char.IsDigit(name[6])) name = "Keypad" + name[6];
+            else switch (key)
+            {
+                case Key.Enter:       name = "Return"; break;
+                case Key.NumpadEnter: name = "KeypadEnter"; break;
+                case Key.Backquote:   name = "BackQuote"; break;
+                case Key.LeftCtrl:    name = "LeftControl"; break;
+                case Key.RightCtrl:   name = "RightControl"; break;
+                case Key.LeftMeta:    name = "LeftCommand"; break;
+            }
+            return Enum.TryParse(name, true, out code) && code != KeyCode.None;
+        }
+
         private static bool TryMap(KeyCode code, out Key key)
         {
             string name = code.ToString();

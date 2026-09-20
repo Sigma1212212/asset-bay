@@ -104,6 +104,8 @@ namespace BundleMenu
         public AssetSpawner Spawner { get; private set; }
         public GunLib Gun { get; private set; }
         public ModRunner Mods { get; private set; }
+        public PaintMode Paint { get; private set; }
+        public PropGunMode Props { get; private set; }
         public Checkpoint Checkpoint { get; } = new Checkpoint();
         public FeedClient Feed { get; private set; }
         public VideoTablet Tablet { get; private set; }
@@ -217,15 +219,13 @@ namespace BundleMenu
             pointer.OnWindowDragged = pos => { guiPosition = pos; SavePrefs(); };
 
             Gun = gameObject.AddComponent<GunLib>();
-            Gun.AimKey = gunAimKey;
+            if (gunAimKey != KeyCode.Mouse1) Gun.AimKey = gunAimKey;   // saved choice wins over the inspector
             Gun.Rig = () => Rig;
             Gun.Theme = () => CurrentTheme;
             Gun.Blocked = () => pointer != null && pointer.OverMenu;
             Gun.Report = message => { Toast(message, ToastKind.Info); dirty = true; };
-            Gun.Register(new PlaceMode(Spawner));
-            Gun.Register(new DeleteMode(Spawner));
-            Gun.Register(new InspectMode());
-            Gun.Register(new MeasureMode());
+            Gun.Overlay = () => screenCanvas;
+            Gun.Changed += () => dirty = true;
 
             Mods = gameObject.AddComponent<ModRunner>();
             Mods.Init(new ModContext
@@ -236,8 +236,19 @@ namespace BundleMenu
                 GunUsesRightGrip = () => Gun != null && Gun.GunEnabled,
                 Toast = message => Toast(message, ToastKind.Info),
                 ScreenCanvas = screenCanvas,
+                Spawner = Spawner,
+                MenuBusy = () => Gun != null && Gun.Rebinding,
             });
             Mods.Changed += () => dirty = true;
+
+            // Gun modes, in the order they cycle. The movement ones follow the mods' lobby rule.
+            Gun.Register(new PlaceMode(Spawner));
+            Gun.Register(Props = new PropGunMode(Spawner, () => CurrentTheme) { Build = PropBuildInfo });
+            Gun.Register(new DeleteMode(Spawner));
+            Gun.Register(new TractorMode(Spawner));
+            Gun.Register(Paint = new PaintMode(() => CurrentTheme));
+            Gun.Register(new InspectMode());
+            Gun.Register(new MeasureMode());
 
             Feed = new FeedClient(backendUrl);
             Tablet = gameObject.AddComponent<VideoTablet>();
@@ -250,7 +261,14 @@ namespace BundleMenu
             Screens = gameObject.AddComponent<BroadcastScreens>();
             Screens.ScreensEnabled = broadcastScreens;
             Screens.ViewCamera = () => Rig.Camera;
-            if (Mods.Available) Gun.Register(new GrappleMode(Mods.Context));
+            if (Mods.Available)
+            {
+                Gun.Register(new GrappleMode(Mods.Context));
+                Gun.Register(new TeleportMode(Mods.Context));
+                Gun.Register(new PlatformGunMode(Mods.Context, Spawner));
+                Gun.Register(new WaypointMode(Mods.Context, Spawner));
+                Gun.Register(new ImpulseMode(Mods.Context, Spawner));
+            }
 
             // Menus seeing each other: only in Gorilla Tag (needs the room and player ids).
             var gtPlayer = Mods.Context.Player;
@@ -295,6 +313,7 @@ namespace BundleMenu
 
         private void OnDestroy()
         {
+            Paint?.Destroy();
             Service?.Dispose();
             if (worldCanvas != null) Destroy(worldCanvas.gameObject);
             gui?.Dispose();
@@ -304,6 +323,13 @@ namespace BundleMenu
 
         private void Update()
         {
+            // Picking a new control takes over the keyboard for a moment, so nothing else reads it.
+            if (Mods != null && Mods.Binds.Listening != null)
+            {
+                if (Mods.Binds.PollListening()) dirty = true;
+                return;
+            }
+
             if (MenuInput.KeyDown(toggleKey) || MenuInput.VRButtonDown(vrToggle)) Toggle();
             if (MenuInput.KeyDown(cycleEntranceKey)) CycleEntrance(+1);
             if (MenuInput.KeyDown(cyclePlacementKey)) CyclePlacement(+1);

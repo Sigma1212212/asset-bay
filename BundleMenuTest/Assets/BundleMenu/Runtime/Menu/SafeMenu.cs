@@ -15,8 +15,8 @@ namespace BundleMenu
 
         public bool Visible { get; private set; }
 
-        private enum Tab { Menu, Sync, Online, Tablet, Admin, Tools, Info }
-        private static readonly string[] TabNames = { "menu", "sync", "online", "tablet", "admin", "tools", "info" };
+        private enum Tab { Menu, Mods, Sync, Online, Tablet, Admin, Tools, Info }
+        private static readonly string[] TabNames = { "menu", "mods", "sync", "online", "tablet", "admin", "tools", "info" };
         private Tab tab;
         private Rect window = new Rect(80, 80, 680, 520);
         private CursorLockMode savedLock;
@@ -27,8 +27,9 @@ namespace BundleMenu
 
         private void Update()
         {
-            // Don't react to H while typing a sync code into the window.
+            // Don't react to H while typing a sync code, or while a mod control is being chosen.
             if (Visible && GUIUtility.keyboardControl != 0) return;
+            if (Menu != null && Menu.Mods != null && Menu.Mods.Binds.Listening != null) return;
             if (MenuInput.KeyDown(Key)) SetVisible(!Visible);
             if (Visible) { Cursor.lockState = CursorLockMode.None; Cursor.visible = true; } // the game re-locks it
         }
@@ -77,6 +78,7 @@ namespace BundleMenu
                 switch (tab)
                 {
                     case Tab.Menu: DrawMenuTab(); break;
+                    case Tab.Mods: DrawModsTab(); break;
                     case Tab.Sync: DrawSyncTab(); break;
                     case Tab.Online: DrawOnlineTab(); break;
                     case Tab.Tablet: DrawTabletTab(); break;

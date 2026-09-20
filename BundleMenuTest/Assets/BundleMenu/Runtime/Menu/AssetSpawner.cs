@@ -16,46 +16,73 @@ namespace BundleMenu
         public int MaxPerBundle = 24;
 
         private readonly Dictionary<string, List<GameObject>> spawned = new Dictionary<string, List<GameObject>>();
+        private readonly HashSet<GameObject> roots = new HashSet<GameObject>();
         private Transform container;
 
-        public int Count => spawned.Values.Sum(l => l.Count(g => g != null));
+        /// <summary>How many things of yours are in the world right now.</summary>
+        public int Count => roots.Count;
 
         /// <summary>The last GameObject asset used, so the gun can place more of it.</summary>
         public GameObject LastPrefab { get; private set; }
         public string LastBundleId { get; private set; }
 
-        public bool IsSpawned(GameObject go) =>
-            go != null && spawned.Values.Any(list => list.Contains(go));
+        public bool IsSpawned(GameObject go) => go != null && roots.Contains(go);
 
         /// <summary>Walks up from a collider hit to the spawned root object, if any.</summary>
         public GameObject SpawnedRootOf(Transform t)
         {
             for (; t != null; t = t.parent)
-                if (IsSpawned(t.gameObject)) return t.gameObject;
+                if (roots.Contains(t.gameObject)) return t.gameObject;
             return null;
         }
 
         public bool Despawn(GameObject go)
         {
+            if (go == null || !roots.Remove(go)) return false;
             foreach (var list in spawned.Values)
-                if (list.Remove(go)) { Destroy(go); return true; }
-            return false;
+                if (list.Remove(go)) break;
+            Destroy(go);
+            return true;
+        }
+
+        /// <summary>
+        /// Takes ownership of something built elsewhere (the gun's platforms and beacons), so it counts
+        /// as yours: the Delete mode can remove it and "clear what I spawned" tidies it away.
+        /// </summary>
+        public GameObject Adopt(GameObject go, string bundleId)
+        {
+            if (go == null) return null;
+            go.transform.SetParent(Container, worldPositionStays: true);
+            Track(bundleId, go);
+            return go;
+        }
+
+        /// <summary>Puts an object on the books, dropping the oldest when a bundle is over its limit.</summary>
+        private void Track(string bundleId, GameObject go)
+        {
+            var list = ListFor(bundleId);
+            for (int i = list.Count - 1; i >= 0; i--)
+                if (list[i] == null) list.RemoveAt(i);
+            if (list.Count >= MaxPerBundle)
+            {
+                roots.Remove(list[0]);
+                Destroy(list[0]);
+                list.RemoveAt(0);
+            }
+            list.Add(go);
+            roots.Add(go);
         }
 
         /// <summary>Instantiate a prefab at an exact pose (used by the gun).</summary>
         public GameObject SpawnAt(GameObject prefab, string bundleId, Vector3 position, Quaternion rotation)
         {
             if (prefab == null) return null;
-            var list = ListFor(bundleId);
-            list.RemoveAll(g => g == null);
-            if (list.Count >= MaxPerBundle) { Destroy(list[0]); list.RemoveAt(0); }
-
             var go = Instantiate(prefab, position, rotation, Container);
             go.name = prefab.name;
             FixMaterials(go);
             go.SetActive(true);
             go.AddComponent<SpawnPop>();
-            list.Add(go);
+            Track(bundleId, go);
             return go;
         }
 
@@ -71,14 +98,6 @@ namespace BundleMenu
                 {
                     LastPrefab = prefab;
                     LastBundleId = bundleId;
-                    var list = ListFor(bundleId);
-                    list.RemoveAll(g => g == null);
-                    if (list.Count >= MaxPerBundle)
-                    {
-                        Destroy(list[0]);
-                        list.RemoveAt(0);
-                    }
-
                     var go = Instantiate(prefab, Container);
                     go.name = prefab.name;
                     FixMaterials(go);
@@ -86,7 +105,7 @@ namespace BundleMenu
                     go.transform.rotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
                     go.SetActive(true);
                     go.AddComponent<SpawnPop>();
-                    list.Add(go);
+                    Track(bundleId, go);
                     return $"Spawned {prefab.name}";
                 }
 
@@ -151,13 +170,23 @@ namespace BundleMenu
         {
             if (LastBundleId == bundleId) { LastPrefab = null; LastBundleId = null; }
             if (!spawned.TryGetValue(bundleId, out var list)) return;
-            foreach (var g in list) if (g != null) Destroy(g);
+            foreach (var g in list)
+            {
+                if (g == null) continue;
+                roots.Remove(g);
+                Destroy(g);
+            }
             spawned.Remove(bundleId);
         }
 
+        private readonly List<string> bundleIds = new List<string>();
+
         public void ClearAll()
         {
-            foreach (var id in spawned.Keys.ToList()) ClearBundle(id);
+            bundleIds.Clear();
+            bundleIds.AddRange(spawned.Keys);
+            foreach (var id in bundleIds) ClearBundle(id);
+            roots.Clear();
         }
 
         private void OnDestroy()

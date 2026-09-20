@@ -53,6 +53,8 @@ namespace BundleMenu
     {
         public override string Name => "Noclip";
         public override string Hint => "use with Fly";
+        public override KeyCode DefaultKey => KeyCode.N;
+        public override VRInput DefaultButton => VRInput.None;
 
         private int? savedLayers;
         private bool bodyWasOn, headWasOn;
@@ -101,6 +103,7 @@ namespace BundleMenu
     {
         public override string Name => "Hover";
         public override string Hint => "float";
+        public override KeyCode DefaultKey => KeyCode.J;
 
         public override void FixedTick(ModContext ctx)
         {
@@ -117,23 +120,23 @@ namespace BundleMenu
     public sealed class DashMod : Mod
     {
         public override string Name => "Dash";
-        public override string Hint => MenuInput.VRActive ? "press B" : "press V";
+        public override string Hint => "tap " + ControlText;
+        public override ModTrigger Trigger => ModTrigger.Tap;
+        public override KeyCode DefaultKey => KeyCode.V;
+        public override VRInput DefaultButton => VRInput.RightSecondary;
 
         public float Power = 16f;
         private float cooldownUntil;
-        private bool prev;
 
-        public override IEnumerable<ModSetting> Settings => new[]
+        private ModSetting[] settings;
+        public override IEnumerable<ModSetting> Settings => settings ?? (settings = new[]
         {
             ModSetting.Choice("Dash power", new[] { 10f, 16f, 24f, 34f }, () => Power, v => Power = v, "{0:0}"),
-        };
+        });
 
         public override void Tick(ModContext ctx)
         {
-            bool held = MenuInput.VRActive ? MenuInput.XRButtonHeld(true, primary: false) : MenuInput.KeyHeld(KeyCode.V);
-            bool pressed = held && !prev;
-            prev = held;
-            if (!pressed || Time.unscaledTime < cooldownUntil) return;
+            if (!Pressed || Time.unscaledTime < cooldownUntil) return;
 
             var rb = ctx.Player.Body;
             var cam = ctx.Rig?.Camera;
@@ -150,7 +153,10 @@ namespace BundleMenu
     public sealed class RewindMod : Mod
     {
         public override string Name => "Rewind";
-        public override string Hint => MenuInput.VRActive ? "hold left trigger" : "hold R";
+        public override string Hint => "hold " + ControlText;
+        public override ModTrigger Trigger => ModTrigger.Held;
+        public override KeyCode DefaultKey => KeyCode.R;
+        public override VRInput DefaultButton => VRInput.LeftTrigger;
 
         private const int Capacity = 250;            // 5 s at 50 Hz
         private readonly Vector3[] path = new Vector3[Capacity];
@@ -171,7 +177,7 @@ namespace BundleMenu
         {
             var body = ctx.Player.BodyCollider;
             if (body == null) return;
-            bool held = MenuInput.VRActive ? MenuInput.XRHeld(false, trigger: true) : MenuInput.KeyHeld(KeyCode.R);
+            bool held = Using;
 
             if (!held)
             {
@@ -219,6 +225,7 @@ namespace BundleMenu
     public sealed class EspMod : Mod
     {
         public override string Name => "ESP";
+        public override KeyCode DefaultKey => KeyCode.X;
         public override string Hint => $"{tracked.Count} players";
 
         public bool Tracers = true;
@@ -340,6 +347,7 @@ namespace BundleMenu
     public sealed class HandTrailsMod : Mod
     {
         public override string Name => "Hand Trails";
+        public override KeyCode DefaultKey => KeyCode.T;
         public override string Hint => "theme colours";
 
         private TrailRenderer left, right;
@@ -383,6 +391,7 @@ namespace BundleMenu
     public sealed class SpeedometerMod : Mod
     {
         public override string Name => "Speedometer";
+        public override KeyCode DefaultKey => KeyCode.M;
         public override string Hint => $"top {top:0.0} m/s";
 
         private TextMeshProUGUI text;
@@ -425,7 +434,8 @@ namespace BundleMenu
     public sealed class FreecamMod : Mod
     {
         public override string Name => "Freecam";
-        public override string Hint => "WASD + right mouse";
+        public override string Hint => "WASD, Q/E, right mouse looks";
+        public override KeyCode DefaultKey => KeyCode.P;
 
         private Camera cam;
         private float yaw, pitch;

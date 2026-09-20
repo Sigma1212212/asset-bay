@@ -14,6 +14,9 @@ namespace BundleMenu
         public Action<string> Toast;
         public Canvas ScreenCanvas;           // for on-screen readouts (speedometer)
         public Func<bool> Allowed;            // lobby gate, for things outside the runner (gun modes)
+        public ModBinds Binds;                // the controls, shared by every mod
+        public AssetSpawner Spawner;          // for mods that put things in the world
+        public Func<bool> MenuBusy;           // true while the menu is taking your clicks / re-binding
     }
 
     /// <summary>
@@ -24,8 +27,30 @@ namespace BundleMenu
     public abstract class Mod
     {
         public abstract string Name { get; }
-        public abstract string Hint { get; }            // controls, shown in the menu row
+        public abstract string Hint { get; }            // what it's doing, shown in the menu row
         public bool Enabled { get; internal set; }
+
+        /// <summary>How this mod is used: a switch, held down, or tapped.</summary>
+        public virtual ModTrigger Trigger => ModTrigger.Switch;
+
+        /// <summary>The control it starts with on a keyboard. Everyone can change it in Mods &gt; Controls.</summary>
+        public virtual KeyCode DefaultKey => KeyCode.None;
+
+        /// <summary>The control it starts with in VR.</summary>
+        public virtual VRInput DefaultButton => VRInput.None;
+
+        /// <summary>This mod's control, whichever device you're on. Set by the runner.</summary>
+        public ModBind Bind { get; internal set; }
+
+        /// <summary>True while the control is being used (held, or latched on if you chose tap-to-stick).</summary>
+        protected bool Using => Bind != null && Bind.held;
+
+        /// <summary>True on the frame the control is pressed.</summary>
+        protected bool Pressed => Bind != null && Bind.down;
+
+        /// <summary>The control as words, for the menu: "F" on a keyboard, "left X" in VR.</summary>
+        public string ControlText =>
+            Bind == null ? "-" : MenuInput.VRActive ? Bind.ButtonText : Bind.KeyText;
 
         /// <summary>Adjustable values shown under the mod in the menu (click cycles, right-click goes back).</summary>
         public virtual IEnumerable<ModSetting> Settings => Array.Empty<ModSetting>();
@@ -66,6 +91,7 @@ namespace BundleMenu
     {
         public ModContext Context { get; } = new ModContext();
         public IReadOnlyList<Mod> Mods => mods;
+        public ModBinds Binds { get; } = new ModBinds();
         public LobbyKind Lobby { get; private set; } = LobbyKind.NotGorillaTag;
 
         public bool Available => Context.Player != null;
@@ -84,8 +110,14 @@ namespace BundleMenu
             Context.GunUsesRightGrip = ctx.GunUsesRightGrip;
             Context.Toast = ctx.Toast;
             Context.ScreenCanvas = ctx.ScreenCanvas;
+            Context.Spawner = ctx.Spawner;
+            Context.MenuBusy = ctx.MenuBusy;
             Context.Allowed = () => Allowed;
+            Context.Binds = Binds;
+            Binds.Load();                       // saved choices first, so defaults never overwrite them
             CreateDefaults();
+            foreach (var mod in mods) mod.Bind = Binds.Register(mod.Name, mod.DefaultKey, mod.DefaultButton);
+            Binds.Save();                       // keeps newly added mods in the file
             Lobby = Available ? Context.Player.Lobby : LobbyKind.NotGorillaTag;
         }
 
@@ -122,6 +154,7 @@ namespace BundleMenu
         {
             if (mod.Enabled == on) return;
             mod.Enabled = on;
+            if (!on) Binds.Release(mod.Name);
             try { if (on) mod.OnEnable(Context); else mod.OnDisable(Context); }
             catch (Exception e) { Debug.LogException(e); }
             Changed?.Invoke();
@@ -132,6 +165,15 @@ namespace BundleMenu
 
         public string Set(Mod mod, bool on) => mod.Enabled == on ? $"{mod.Name} already {(on ? "on" : "off")}" : Toggle(mod);
 
+        /// <summary>Puts every control back to the key and button the mod started with.</summary>
+        public void ResetBinds()
+        {
+            Binds.ResetAll(() =>
+            {
+                foreach (var mod in mods) mod.Bind = Binds.Register(mod.Name, mod.DefaultKey, mod.DefaultButton);
+            });
+        }
+
         public void DisableAll()
         {
             foreach (var m in mods) SetEnabled(m, false);
@@ -139,7 +181,18 @@ namespace BundleMenu
 
         private void Update()
         {
+            Binds.Tick();
             if (!Available) return;
+
+            // Switch-style mods can be turned on and off by their key without opening the menu.
+            bool busy = Binds.Listening != null || (Context.MenuBusy != null && Context.MenuBusy());
+            if (!busy)
+                for (int i = 0; i < mods.Count; i++)
+                {
+                    var mod = mods[i];
+                    if (mod.Trigger != ModTrigger.Switch || !mod.Bind.down) continue;
+                    Context.Toast?.Invoke(Toggle(mod));
+                }
 
             if (Time.unscaledTime >= nextLobbyCheck)
             {
@@ -191,24 +244,68 @@ namespace BundleMenu
     public sealed class PlatformsMod : Mod
     {
         public override string Name => "Platforms";
-        public override string Hint => MenuInput.VRActive ? "hold grip" : "hold C";
+        public override string Hint => "hold " + ControlText + " - " + WhereName;
+        public override ModTrigger Trigger => ModTrigger.Held;
+        public override KeyCode DefaultKey => KeyCode.C;
+        public override VRInput DefaultButton => VRInput.LeftGrip;
 
-        private readonly Platform left = new Platform(), right = new Platform(), feet = new Platform();
+        /// <summary>0 = under your feet, 1 = where you're looking, 2 = both.</summary>
+        public int Where = 2;
+        public float Reach = 12f;
+        private string WhereName => Where == 0 ? "at your feet" : Where == 1 ? "where you look" : "feet + aim";
+
+        private ModSetting[] settings;
+        public override IEnumerable<ModSetting> Settings => settings ?? (settings = new[]
+        {
+            new ModSetting
+            {
+                Name = "Put it", Value = () => WhereName,
+                Cycle = dir => Where = (Where + dir + 3) % 3,
+            },
+            ModSetting.Choice("Reach", new[] { 6f, 12f, 20f, 35f }, () => Reach, v => Reach = v, "{0:0} m"),
+        });
+
+        private readonly Platform left = new Platform(), right = new Platform(), feet = new Platform(), aimed = new Platform();
 
         public override void Tick(ModContext ctx)
         {
             if (MenuInput.VRActive)
             {
-                Drive(left, MenuInput.XRHeld(false, false), ctx.Rig?.WristAnchor, ctx, 0.05f);
+                // In VR a platform appears under each hand you grip, exactly as before.
+                Drive(left, Using || MenuInput.XRHeld(false, false), ctx.Rig?.WristAnchor, ctx, 0.05f);
                 bool rightFree = ctx.GunUsesRightGrip == null || !ctx.GunUsesRightGrip();
                 Drive(right, rightFree && MenuInput.XRHeld(true, false), ctx.Rig?.RightHandTransform, ctx, 0.05f);
             }
             else
             {
+                // On a keyboard one key does the same job: under your feet, or out where you're looking.
+                bool held = Using;
                 var body = ctx.Player.BodyCollider;
-                Drive(feet, MenuInput.KeyHeld(KeyCode.C), body != null ? body.transform : null, ctx, 0f, underBody: body);
+                Drive(feet, held && Where != 1, body != null ? body.transform : null, ctx, 0f, underBody: body);
+
+                var cam = ctx.Rig?.Camera;
+                if (held && Where != 0 && cam != null && !aimed.Placed)
+                {
+                    var t = cam.transform;
+                    var point = Physics.Raycast(t.position, t.forward, out var hit, Reach, ~0, QueryTriggerInteraction.Ignore)
+                        ? hit.point + Vector3.up * 0.02f
+                        : t.position + t.forward * Reach;
+                    aimed.Place(point, Quaternion.Euler(0f, t.eulerAngles.y, 0f), ctx.Player.WalkableLayer, ctx.Theme?.Invoke());
+                }
+                else if (!held && aimed.Placed)
+                {
+                    aimed.Release();
+                }
             }
-            left.Animate(); right.Animate(); feet.Animate();
+            left.Animate(); right.Animate(); feet.Animate(); aimed.Animate();
+        }
+
+        /// <summary>Used by the platform gun: drop a standalone platform that stays put.</summary>
+        public static GameObject Drop(Vector3 position, Quaternion rotation, int layer, MenuTheme theme, float size)
+        {
+            var platform = new Platform();
+            platform.Place(position, rotation, layer, theme);
+            return platform.Freeze(size);
         }
 
         private static void Drive(Platform p, bool held, Transform hand, ModContext ctx, float below, Collider underBody = null)
@@ -229,7 +326,7 @@ namespace BundleMenu
 
         public override void OnDisable(ModContext ctx)
         {
-            left.Destroy(); right.Destroy(); feet.Destroy();
+            left.Destroy(); right.Destroy(); feet.Destroy(); aimed.Destroy();
         }
 
         private sealed class Platform
@@ -259,6 +356,21 @@ namespace BundleMenu
             }
 
             public void Release() => target = 0f;
+            public GameObject Object => go;
+
+            /// <summary>Leaves the platform in the world at full size and hands it over (the gun owns it then).</summary>
+            public GameObject Freeze(float size)
+            {
+                if (go == null) return null;
+                t = target = 1f;
+                mat.name = "platform (menu)";
+                go.transform.localScale = new Vector3(size, 0.05f, size);
+                mat.color = new Color(color.r, color.g, color.b, 0.6f);
+                var handed = go;
+                go = null;       // the caller keeps it; this platform no longer animates or destroys it
+                mat = null;
+                return handed;
+            }
 
             public void Animate()
             {
@@ -287,26 +399,46 @@ namespace BundleMenu
     public sealed class FlyMod : Mod
     {
         public override string Name => "Fly";
-        public override string Hint => MenuInput.VRActive ? "hold X" : "hold F";
+        public override string Hint => "hold " + ControlText + (MenuInput.VRActive ? "" : " (+ WASD)");
+        public override ModTrigger Trigger => ModTrigger.Held;
+        public override KeyCode DefaultKey => KeyCode.F;
+        public override VRInput DefaultButton => VRInput.LeftPrimary;
 
         public float Speed = 11f;
         private float throttle;
 
-        public override IEnumerable<ModSetting> Settings => new[]
+        private ModSetting[] settings;
+        public override IEnumerable<ModSetting> Settings => settings ?? (settings = new[]
         {
             ModSetting.Choice("Fly speed", new[] { 6f, 11f, 18f, 28f }, () => Speed, v => Speed = v, "{0:0} m/s"),
-        };
+        });
 
         public override void FixedTick(ModContext ctx)
         {
-            bool held = MenuInput.VRActive ? MenuInput.XRButtonHeld(false, primary: true) : MenuInput.KeyHeld(KeyCode.F);
+            bool held = Using;
             throttle = Mathf.MoveTowards(throttle, held ? 1f : 0f, Time.fixedDeltaTime * (held ? 3f : 6f));
             if (throttle <= 0f) return;
 
             var rb = ctx.Player.Body;
             var cam = ctx.Rig?.Camera;
             if (rb == null || cam == null) return;
-            var target = cam.transform.forward * Speed * Ease.OutCubic(throttle);
+
+            // Where you look, plus WASD / Space / Ctrl steering on a keyboard so it flies like a PC game.
+            var t = cam.transform;
+            var direction = t.forward;
+            if (!MenuInput.VRActive)
+            {
+                var steer = Vector3.zero;
+                if (MenuInput.KeyHeld(KeyCode.W)) steer += t.forward;
+                if (MenuInput.KeyHeld(KeyCode.S)) steer -= t.forward;
+                if (MenuInput.KeyHeld(KeyCode.D)) steer += t.right;
+                if (MenuInput.KeyHeld(KeyCode.A)) steer -= t.right;
+                if (MenuInput.KeyHeld(KeyCode.Space)) steer += Vector3.up;
+                if (MenuInput.KeyHeld(KeyCode.LeftControl)) steer += Vector3.down;
+                if (steer.sqrMagnitude > 0.001f) direction = steer.normalized;
+            }
+
+            var target = direction * (Speed * Ease.OutCubic(throttle));
             // Blend toward the target velocity: responsive, but not an instant snap.
             rb.velocity = Vector3.Lerp(rb.velocity, target, 0.25f);
         }
@@ -317,13 +449,15 @@ namespace BundleMenu
     {
         public override string Name => "Speed Boost";
         public override string Hint => $"x{Multiplier:0.##}";
+        public override KeyCode DefaultKey => KeyCode.B;
         public float Multiplier = 1.35f;
         private float? jump, maxJump;
 
-        public override IEnumerable<ModSetting> Settings => new[]
+        private ModSetting[] settings;
+        public override IEnumerable<ModSetting> Settings => settings ?? (settings = new[]
         {
             ModSetting.Choice("Boost", new[] { 1.15f, 1.35f, 1.6f, 2f, 2.5f }, () => Multiplier, v => Multiplier = v, "x{0:0.##}"),
-        };
+        });
 
         public override void OnEnable(ModContext ctx)
         {
@@ -350,6 +484,7 @@ namespace BundleMenu
     {
         public override string Name => "Low Gravity";
         public override string Hint => "40% gravity";
+        public override KeyCode DefaultKey => KeyCode.G;
 
         public override void FixedTick(ModContext ctx)
         {
@@ -363,14 +498,16 @@ namespace BundleMenu
     {
         public override string Name => "Size";
         public override string Hint => $"x{Factor:0.##}";
+        public override KeyCode DefaultKey => KeyCode.U;
         public float Factor = 1.5f;
         private float original = 1f;
         private float applied;
 
-        public override IEnumerable<ModSetting> Settings => new[]
+        private ModSetting[] settings;
+        public override IEnumerable<ModSetting> Settings => settings ?? (settings = new[]
         {
             ModSetting.Choice("Size", new[] { 0.5f, 0.75f, 1.5f, 2f }, () => Factor, v => Factor = v, "x{0:0.##}"),
-        };
+        });
 
         public override void OnEnable(ModContext ctx)
         {

@@ -26,6 +26,16 @@ namespace BundleMenu
             Safe.Menu = this;
         }
 
+        /// <summary>Puts every mod control back to the key and button it started with.</summary>
+        public void ResetModControls()
+        {
+            Mods.ResetBinds();
+            Gun.AimKey = KeyCode.Mouse1;
+            PlayerPrefs.SetInt("BundleMenu.gun.aimkey", (int)KeyCode.Mouse1);
+            Toast("Controls are back to normal", ToastKind.Success);
+            dirty = true;
+        }
+
         /// <summary>Called at the end of every save: stamp the time and queue an upload.</summary>
         private void AfterSave()
         {

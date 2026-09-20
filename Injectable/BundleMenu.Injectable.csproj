@@ -21,7 +21,7 @@
     <DebugType>portable</DebugType>
     <Version>1.0.0</Version>
     <!-- Game ships both input backends enabled; MenuInput picks at runtime and survives either being off. -->
-    <DefineConstants>$(DefineConstants);ENABLE_INPUT_SYSTEM;ENABLE_LEGACY_INPUT_MANAGER</DefineConstants>
+    <DefineConstants>$(DefineConstants);ENABLE_INPUT_SYSTEM;ENABLE_LEGACY_INPUT_MANAGER;UNITY_6000_0_OR_NEWER</DefineConstants>
     <NoWarn>$(NoWarn);CS0618;CS0649</NoWarn>             <!-- Unity 6 marks a few TMP/Object APIs obsolete; they still work -->
 
     <GameDir Condition="'$(GameDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Gorilla Tag</GameDir>

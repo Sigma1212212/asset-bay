@@ -32,6 +32,9 @@ namespace BundleMenu
     {
         private const string Api = "https://api.spotify.com/v1";
 
+        /// <summary>The one running inside the game, for props that follow your music.</summary>
+        public static SpotifyClient Live { get; private set; }
+
         public SpotifyState State { get; private set; } = new SpotifyState();
         public string LastError { get; private set; }
         public bool Busy { get; private set; }
@@ -43,6 +46,10 @@ namespace BundleMenu
         public Func<float> Interval;
         private float nextPoll;
         private bool polling;
+
+        private void Awake() => Live = this;
+
+        private void OnDestroy() { if (Live == this) Live = null; }
 
         private void Update()
         {

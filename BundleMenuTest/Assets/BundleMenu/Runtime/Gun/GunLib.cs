@@ -13,38 +13,26 @@ namespace BundleMenu
         public Vector3 Normal;
         public float Distance;
         public Collider Collider;      // null when nothing was hit
+        public float Charge;           // 0..1, how long the trigger was held for charge-up modes
     }
 
-    /// <summary>
-    /// A gun mode: what happens when you fire, plus optional per-frame feedback.
-    /// Add your own by implementing this and calling <see cref="GunLib.Register"/>.
-    /// </summary>
-    public interface IGunMode
-    {
-        string Name { get; }
-
-        /// <summary>Colour hint for the reticle while aiming at this hit (null = theme accent).</summary>
-        Color? Tint(GunHit hit);
-
-        /// <summary>Short text shown next to the reticle state in the menu, e.g. "3.2 m".</summary>
-        string Describe(GunHit hit);
-
-        /// <summary>Called on the trigger's rising edge. Return a message for the menu's status line.</summary>
-        string Fire(GunHit hit);
-    }
+    /// <summary>Where the aim comes from on a keyboard.</summary>
+    public enum GunAim { Mouse, Crosshair }
 
     /// <summary>
-    /// Aim-and-fire utility (a "gun lib"). Desktop: hold the aim button (right mouse by default) and
-    /// left-click to fire. VR: hold the right grip and pull the right trigger.
+    /// The aiming end of the menu: one place that works out what you're pointing at, draws the laser,
+    /// reticle and the gun in your hand, and hands the result to the selected <see cref="GunMode"/>.
     ///
-    /// It raycasts the world (ignoring the player's own body and trigger volumes), draws a themed laser
-    /// and reticle, and hands the hit to the selected <see cref="IGunMode"/>. It only ever affects things
-    /// on your own machine.
+    /// Desktop: hold the aim key (right mouse by default) and click to fire. VR: hold the right grip and
+    /// pull the right trigger. Modes can be single-shot, automatic, or charged by holding the trigger.
+    /// Everything it does happens on your own machine.
     /// </summary>
     public sealed class GunLib : MonoBehaviour
     {
         public bool GunEnabled;
         public KeyCode AimKey = KeyCode.Mouse1;
+        public GunAim Aim = GunAim.Mouse;
+        public bool ShowModel = true;
         public float MaxDistance = 60f;
         public LayerMask Layers = ~0;
 
@@ -53,105 +41,218 @@ namespace BundleMenu
         public Func<MenuTheme> Theme;
         public Func<bool> Blocked;              // e.g. cursor is over the menu
         public Action<string> Report;           // status-line messages
+        public Func<Canvas> Overlay;            // screen canvas, for the crosshair
 
         public bool Aiming { get; private set; }
+        public bool Firing { get; private set; }
         public GunHit Current { get; private set; }
-        public IGunMode Mode => modes.Count > 0 ? modes[modeIndex] : null;
-        public IReadOnlyList<IGunMode> Modes => modes;
+        public GunMode Mode => modes.Count > 0 ? modes[modeIndex] : null;
+        public IReadOnlyList<GunMode> Modes => modes;
+        public float Charge { get; private set; }
+        public float Cooldown { get; private set; }     // 0..1, how much of the wait is left
+        public bool Rebinding { get; private set; }
+        public event Action Changed;
 
-        private readonly List<IGunMode> modes = new List<IGunMode>();
+        private readonly List<GunMode> modes = new List<GunMode>();
         private int modeIndex;
         private bool prevFire;
-        private LineRenderer line;
-        private Transform reticle, ring;
-        private Material lineMat, reticleMat;
-        private float fireFlash;
-        private readonly RaycastHit[] hits = new RaycastHit[16];
+        private float readyAt, chargeStart;
+        private GunVisuals visuals;
 
-        public void Register(IGunMode mode)
+        private const string PrefsAim = "BundleMenu.gun.aim";
+        private const string PrefsKey = "BundleMenu.gun.aimkey";
+        private const string PrefsModel = "BundleMenu.gun.model";
+        private const string PrefsMode = "BundleMenu.gun.mode";
+
+        // ------------------------------------------------------------------ setup
+
+        private void Awake()
         {
-            if (mode != null && !modes.Contains(mode)) modes.Add(mode);
+            visuals = new GunVisuals();
+            Aim = (GunAim)PlayerPrefs.GetInt(PrefsAim, (int)GunAim.Mouse);
+            ShowModel = PlayerPrefs.GetInt(PrefsModel, 1) == 1;
+            int saved = PlayerPrefs.GetInt(PrefsKey, 0);
+            if (saved != 0) AimKey = (KeyCode)saved;
+        }
+
+        private void Start() => SelectMode(PlayerPrefs.GetInt(PrefsMode, 0));
+
+        private void OnDestroy() => visuals?.Destroy();
+
+        public void Register(GunMode mode)
+        {
+            if (mode == null || modes.Contains(mode)) return;
+            mode.Gun = this;
+            modes.Add(mode);
         }
 
         public void CycleMode(int dir)
         {
             if (modes.Count == 0) return;
-            modeIndex = (modeIndex + dir + modes.Count) % modes.Count;
+            SelectMode(((modeIndex + dir) % modes.Count + modes.Count) % modes.Count);
         }
 
-        public void SelectMode(int index) => modeIndex = Mathf.Clamp(index, 0, Math.Max(0, modes.Count - 1));
+        public void SelectMode(int index)
+        {
+            if (modes.Count == 0) return;
+            index = Mathf.Clamp(index, 0, modes.Count - 1);
+            if (index != modeIndex) modes[modeIndex]?.OnDeselected();
+            modeIndex = index;
+            modes[modeIndex]?.OnSelected(this);
+            Charge = 0f;
+            PlayerPrefs.SetInt(PrefsMode, modeIndex);
+            Changed?.Invoke();
+        }
+
         public int ModeIndex => modeIndex;
 
-        private void Awake() => BuildVisuals();
-
-        private void OnDestroy()
+        public void SetAim(GunAim aim)
         {
-            if (line != null) Destroy(line.gameObject);
-            if (reticle != null) Destroy(reticle.gameObject);
-            if (lineMat != null) Destroy(lineMat);
-            if (reticleMat != null) Destroy(reticleMat);
+            Aim = aim;
+            PlayerPrefs.SetInt(PrefsAim, (int)aim);
+            Changed?.Invoke();
         }
+
+        public void SetModelVisible(bool visible)
+        {
+            ShowModel = visible;
+            if (!visible) visuals.HideModel();
+            PlayerPrefs.SetInt(PrefsModel, visible ? 1 : 0);
+            Changed?.Invoke();
+        }
+
+        /// <summary>Listen for the next key pressed and use it as the aim button.</summary>
+        public void ListenForAimKey() => Rebinding = true;
+
+        // ------------------------------------------------------------------ per-frame
 
         private void Update()
         {
+            if (Rebinding)
+            {
+                if (MenuInput.KeyDown(KeyCode.Escape)) Rebinding = false;
+                else if (MenuInput.AnyKeyDown(out var key))
+                {
+                    AimKey = key;
+                    PlayerPrefs.SetInt(PrefsKey, (int)key);
+                    Rebinding = false;
+                    Changed?.Invoke();
+                }
+                return;
+            }
+
+            // Switched off: one comparison per frame and nothing else.
+            if (!GunEnabled)
+            {
+                if (Aiming || Firing) { EndFire(default); Aiming = false; visuals.Hide(); }
+                return;
+            }
+
             bool vr = MenuInput.VRActive;
             var rig = Rig?.Invoke();
+            Cooldown = Mathf.Clamp01((readyAt - Time.unscaledTime) / 0.35f);
 
-            bool aimHeld = GunEnabled && (vr ? MenuInput.XRHeld(rightHand: true, trigger: false) : MenuInput.KeyHeld(AimKey));
+            bool aimHeld = vr ? MenuInput.XRHeld(rightHand: true, trigger: false) : MenuInput.KeyHeld(AimKey);
             bool blocked = !vr && Blocked != null && Blocked();
             Aiming = aimHeld && !blocked && rig != null;
 
             if (!Aiming)
             {
-                SetVisible(false);
+                if (Firing) EndFire(default);
+                visuals.Hide();
                 prevFire = false;
+                Charge = 0f;
                 return;
             }
 
-            if (!TryGetRay(rig, vr, out var ray, out var visualOrigin))
+            if (!TryGetRay(rig, vr, out var ray, out var muzzle))
             {
-                SetVisible(false);
+                visuals.Hide();
                 return;
             }
 
             var hit = Cast(ray, rig);
+            var mode = Mode;
+            bool trigger = vr ? MenuInput.XRHeld(rightHand: true, trigger: true) : MenuInput.MouseHeld(0);
+
+            // Charge modes build up while the trigger is down and go off when it's let go.
+            if (mode != null && mode.ChargeTime > 0f)
+            {
+                if (trigger && !prevFire) chargeStart = Time.unscaledTime;
+                Charge = trigger ? Mathf.Clamp01((Time.unscaledTime - chargeStart) / mode.ChargeTime) : 0f;
+            }
+            hit.Charge = Charge;
             Current = hit;
 
-            bool fire = vr ? MenuInput.XRHeld(rightHand: true, trigger: true) : MenuInput.MouseHeld(0);
-            if (fire && !prevFire && Mode != null)
+            if (mode != null)
             {
-                fireFlash = 1f;
-                string message;
-                try { message = Mode.Fire(hit); }
-                catch (Exception e) { message = e.Message; Debug.LogException(e); }
-                if (!string.IsNullOrEmpty(message)) Report?.Invoke(message);
-            }
-            prevFire = fire;
+                if (trigger && !prevFire) { Firing = true; mode.Press(hit); }
+                if (trigger) mode.Hold(hit);
+                if (!trigger && prevFire) EndFire(hit);
 
-            DrawVisuals(visualOrigin, hit);
+                bool wantsShot = mode.ChargeTime > 0f
+                    ? !trigger && prevFire
+                    : mode.Automatic ? trigger : trigger && !prevFire;
+
+                if (wantsShot && Time.unscaledTime >= readyAt) Shoot(hit, mode, muzzle);
+                mode.Aiming(hit);
+            }
+            prevFire = trigger;
+
+            visuals.Draw(this, muzzle, hit, Theme?.Invoke(), mode);
+            visuals.DrawModel(this, rig, vr);
         }
 
-        private static bool TryGetRay(IRigProvider rig, bool vr, out Ray ray, out Vector3 visualOrigin)
+        private void EndFire(GunHit hit)
+        {
+            Firing = false;
+            Mode?.Release(hit);
+        }
+
+        private void Shoot(GunHit hit, GunMode mode, Vector3 muzzle)
+        {
+            readyAt = Time.unscaledTime + Mathf.Max(0.02f, mode.Cooldown);
+            visuals.Kick(0.6f + 0.7f * hit.Charge);
+
+            string message;
+            try { message = mode.Fire(hit); }
+            catch (Exception e) { message = e.Message; Debug.LogException(e); }
+
+            if (hit.HasHit) visuals.Impact(hit.Point, hit.Normal, mode.Tint(hit) ?? Theme?.Invoke()?.Accent ?? Color.cyan);
+            if (!string.IsNullOrEmpty(message)) Report?.Invoke(message);
+            Charge = 0f;
+        }
+
+        // ------------------------------------------------------------------ aiming
+
+        private bool TryGetRay(IRigProvider rig, bool vr, out Ray ray, out Vector3 muzzle)
         {
             ray = default;
-            visualOrigin = default;
+            muzzle = default;
 
             if (vr)
             {
                 var hand = rig.HandAimRay;
                 if (hand == null) return false;
                 ray = hand.Value;
-                visualOrigin = ray.origin;
+                muzzle = ray.origin + ray.direction * 0.12f;
                 return true;
             }
 
             var cam = rig.Camera;
             if (cam == null) return false;
-            ray = cam.ScreenPointToRay(MenuInput.MousePosition);
-            // Start the laser a little below-right of the view, like it's held, so it isn't a dot.
-            visualOrigin = cam.transform.TransformPoint(new Vector3(0.22f, -0.18f, 0.35f));
+            ray = Aim == GunAim.Crosshair
+                ? new Ray(cam.transform.position, cam.transform.forward)
+                : cam.ScreenPointToRay(MenuInput.MousePosition);
+            // The laser leaves a point below-right of the view, so it reads as held rather than as a dot.
+            muzzle = cam.transform.TransformPoint(new Vector3(0.22f, -0.18f, 0.4f));
             return true;
         }
+
+        /// <summary>Where the gun's barrel is in the world right now (used by projectiles).</summary>
+        public Vector3 Muzzle(Vector3 fallback) => visuals.MuzzlePoint(fallback);
+
+        private readonly RaycastHit[] hits = new RaycastHit[16];
 
         private GunHit Cast(Ray ray, IRigProvider rig)
         {
@@ -185,84 +286,15 @@ namespace BundleMenu
             return result;
         }
 
-        // ------------------------------------------------------------------ visuals
-
-        private void BuildVisuals()
+        /// <summary>Short line for the menu: what the gun is doing right now.</summary>
+        public string StatusText()
         {
-            // UI/Default is included in every build that has uGUI, so it exists even inside an injected game.
-            var shader = Shader.Find("UI/Default");
-            if (shader == null) shader = Shader.Find("Sprites/Default");
-
-            var lineGo = new GameObject("[BundleMenu] Gun Laser");
-            DontDestroyOnLoad(lineGo);
-            line = lineGo.AddComponent<LineRenderer>();
-            lineMat = new Material(shader);
-            line.sharedMaterial = lineMat;
-            line.positionCount = 2;
-            line.useWorldSpace = true;
-            line.numCapVertices = 4;
-            line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            line.receiveShadows = false;
-            lineGo.SetActive(false);
-
-            reticle = GameObject.CreatePrimitive(PrimitiveType.Sphere).transform;
-            reticle.name = "[BundleMenu] Gun Reticle";
-            DontDestroyOnLoad(reticle.gameObject);
-            Destroy(reticle.GetComponent<Collider>()); // must never block our own ray
-            reticleMat = new Material(shader);
-            var r = reticle.GetComponent<Renderer>();
-            r.sharedMaterial = reticleMat;
-            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-
-            ring = GameObject.CreatePrimitive(PrimitiveType.Cylinder).transform;
-            ring.name = "Ring";
-            Destroy(ring.GetComponent<Collider>());
-            ring.SetParent(reticle, false);
-            ring.GetComponent<Renderer>().sharedMaterial = reticleMat;
-            reticle.gameObject.SetActive(false);
-        }
-
-        private void SetVisible(bool visible)
-        {
-            if (line != null && line.gameObject.activeSelf != visible) line.gameObject.SetActive(visible);
-            if (reticle != null && reticle.gameObject.activeSelf != visible) reticle.gameObject.SetActive(visible);
-        }
-
-        private void DrawVisuals(Vector3 origin, GunHit hit)
-        {
-            SetVisible(true);
-            var theme = Theme?.Invoke();
-            Color a = theme != null ? theme.Accent : Color.cyan;
-            Color b = theme != null ? theme.Accent2 : Color.magenta;
-            var tint = Mode?.Tint(hit);
-            if (tint != null) { a = tint.Value; b = Color.Lerp(tint.Value, b, 0.35f); }
-
-            fireFlash = Mathf.MoveTowards(fireFlash, 0f, Time.unscaledDeltaTime * 4f);
-            float pulse = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 8f);
-
-            // Laser: thin at the hand, wider at the target; flashes white on fire.
-            line.SetPosition(0, origin);
-            line.SetPosition(1, hit.Point);
-            float w = 0.006f + 0.01f * fireFlash;
-            line.startWidth = w * 0.6f;
-            line.endWidth = w * (hit.HasHit ? 1.6f : 0.8f);
-            var start = Color.Lerp(a, Color.white, fireFlash); start.a = 0.9f;
-            var end = Color.Lerp(b, Color.white, fireFlash); end.a = hit.HasHit ? 0.9f : 0.25f;
-            line.startColor = start;
-            line.endColor = end;
-
-            // Reticle: a dot plus a ring lying on the surface, sized so it reads at any distance.
-            reticle.position = hit.Point;
-            float size = Mathf.Clamp(hit.Distance * 0.012f, 0.03f, 0.35f) * (1f + 0.15f * pulse + 0.6f * fireFlash);
-            reticle.localScale = Vector3.one * size;
-            reticleMat.color = Color.Lerp(a, Color.white, fireFlash * 0.7f);
-            ring.gameObject.SetActive(hit.HasHit);
-            if (hit.HasHit)
-            {
-                reticle.rotation = Quaternion.FromToRotation(Vector3.up, hit.Normal);
-                ring.localScale = new Vector3(2.4f + 0.4f * pulse, 0.02f, 2.4f + 0.4f * pulse);
-                ring.localPosition = Vector3.zero;
-            }
+            if (Rebinding) return "press a key";
+            if (!GunEnabled) return "off";
+            var mode = Mode;
+            if (mode == null) return "no mode";
+            if (!Aiming) return mode.Name;
+            return mode.Describe(Current);
         }
     }
 }

@@ -5,6 +5,9 @@ An in-game menu for listing, loading, unloading and spawning Unity **AssetBundle
 - four original themes
 - four placements: right side of the screen, floating in front of you, on your wrist, or the Desktop GUI
 - Desktop GUI: a dedicated window with a flat 2D menu and a live, tilted 3D preview of the real menu (both clickable)
+- mods with the same controls on a keyboard as in VR, all re-bindable (Mods > Controls)
+- a gun lib with twelve modes, a gun you can see in your hand, and charge-up shots
+- fourteen props built into the menu - trampolines, portals, a campfire, a Spotify boombox
 - a gun lib, and signed releases (see `signing/`)
 - a dummy mode, so you can test with no real bundles
 
@@ -20,6 +23,44 @@ An in-game menu for listing, loading, unloading and spawning Unity **AssetBundle
 | `signing/`, `tools/sign/` | Release signing: public key, signing tool, and how to look after the private key. |
 | `LICENSE` | MIT. |
 | `LICENSING.md` | Licences of this repo, the launcher, and the third-party files the test project includes. |
+
+---
+
+## Mods, the gun, and props
+
+**Controls.** Every mod has one control, and the menu picks the right device for you: a keyboard key on
+PC, a controller button in VR. Change any of them in **Mods > Controls**, or in the H window's **mods**
+tab; they're saved on your PC. Switch-style mods (Noclip, ESP, Speedometer...) toggle when you tap their
+key, even with the menu closed. Hold-style mods (Fly, Platforms, Rewind) are armed from the menu and used
+by holding the key - right-click the control to make it a tap-on / tap-off instead.
+
+Defaults: Fly `F` (plus WASD, Space and Ctrl to steer), Platforms `C`, Dash `V`, Rewind `R`, Noclip `N`,
+Low Gravity `G`, Hover `J`, Size `U`, Speed Boost `B`, ESP `X`, Hand Trails `T`, Speedometer `M`,
+Freecam `P`. The gun aims on right mouse and fires on left.
+
+**The gun** (`Gun/`) is a small library: `GunLib` works out what you're pointing at and draws the laser,
+reticle, recoil, muzzle flash, sparks and an optional crosshair; each `GunMode` says what a shot does.
+Modes can fire once, fire automatically, or charge while you hold the trigger. The modes that move your
+player follow the same lobby rule as the mods - offline, private or modded rooms only.
+
+| Mode | What a shot does |
+|---|---|
+| Place | Drops a copy of the last asset you spawned |
+| Props | Places the prop you picked |
+| Delete | Removes something the menu spawned |
+| Tractor | Carries a spawned object; scroll moves it, letting go throws it |
+| Paint | Sprays your theme colours on the world (yours only) |
+| Inspect / Measure | Names what you hit; measures between two shots |
+| Grapple / Teleport | Pulls you to the point; blinks you there |
+| Platform | Shoots platforms you can stand on |
+| Waypoint | Drops beacons; shoot one to travel back to it |
+| Impulse | Charged shove - or launch yourself off the ground |
+
+**Props** (`Props/`) are built from Unity primitives in your theme's colours, so they need no downloads
+and always match: trampoline, launch pad, boost ring, climbing pole, long ramp, portal pads, campfire,
+lamp post, disco ball, monke statue, beach ball, balloon, can stack, and a boombox that shows your
+Spotify cover art and thumps along with it. Spawn them from **Props**, or load one into the gun. Like
+everything else the menu spawns, they exist on your machine only.
 
 ---
 

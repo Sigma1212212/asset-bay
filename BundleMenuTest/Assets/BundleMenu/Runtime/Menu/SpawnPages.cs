@@ -19,6 +19,11 @@ namespace BundleMenu
             var spawner = ctx.Spawner;
 
             rows.Add(RowSpec.Info("note", "Only you see what you spawn", spawner.Count > 0 ? spawner.Count + " out" : ""));
+            rows.Add(new RowSpec
+            {
+                Key = "props", Label = "Props that come with the menu", Value = PropLibrary.All.Count.ToString(),
+                ShowChevron = true, OnClick = () => ctx.Navigate(new PropsPage()),
+            });
             if (spawner.LastPrefab != null)
                 rows.Add(new RowSpec
                 {

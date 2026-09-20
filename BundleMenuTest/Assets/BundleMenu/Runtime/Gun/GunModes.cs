@@ -2,21 +2,22 @@ using UnityEngine;
 
 namespace BundleMenu
 {
-    /// <summary>Place: spawns the last asset you used from a bundle, standing on whatever you point at.</summary>
-    public sealed class PlaceMode : IGunMode
+    /// <summary>Place: puts down a copy of the last asset you spawned, standing on whatever you point at.</summary>
+    public sealed class PlaceMode : GunMode
     {
         private readonly AssetSpawner spawner;
         public PlaceMode(AssetSpawner spawner) => this.spawner = spawner;
 
-        public string Name => "Place";
-        public Color? Tint(GunHit hit) => null;
+        public override string Name => "Place";
+        public override string Hint => "Copies of the last thing you spawned, dropped where you point.";
+        public override float Cooldown => 0.25f;
 
-        public string Describe(GunHit hit) =>
+        public override string Describe(GunHit hit) =>
             spawner.LastPrefab != null ? spawner.LastPrefab.name : "spawn an asset first";
 
-        public string Fire(GunHit hit)
+        public override string Fire(GunHit hit)
         {
-            if (spawner.LastPrefab == null) return "Spawn something from a bundle first - the gun places copies of it.";
+            if (spawner.LastPrefab == null) return "Spawn something first - the gun places copies of it.";
             if (!hit.HasHit) return "Point at a surface to place it.";
 
             // Stand upright on floors, face the camera horizontally.
@@ -31,31 +32,32 @@ namespace BundleMenu
         }
 
         /// <summary>Lift the object so its lowest point sits on the surface instead of half inside it.</summary>
-        private static void RestOnSurface(GameObject go, Vector3 point, Vector3 up)
+        public static void RestOnSurface(GameObject go, Vector3 point, Vector3 up)
         {
             var renderers = go.GetComponentsInChildren<Renderer>();
             if (renderers.Length == 0) return;
             var bounds = renderers[0].bounds;
-            foreach (var r in renderers) bounds.Encapsulate(r.bounds);
+            for (int i = 1; i < renderers.Length; i++) bounds.Encapsulate(renderers[i].bounds);
             float below = Vector3.Dot(point - bounds.center, up) + bounds.extents.y;
             go.transform.position += up * Mathf.Max(0f, below);
         }
     }
 
     /// <summary>Delete: removes objects this menu spawned. Anything else is left alone.</summary>
-    public sealed class DeleteMode : IGunMode
+    public sealed class DeleteMode : GunMode
     {
         private readonly AssetSpawner spawner;
         public DeleteMode(AssetSpawner spawner) => this.spawner = spawner;
 
-        public string Name => "Delete";
+        public override string Name => "Delete";
+        public override string Hint => "Only removes things the menu spawned - the game's own world is safe.";
 
-        public Color? Tint(GunHit hit) =>
+        public override Color? Tint(GunHit hit) =>
             Target(hit) != null ? new Color(1f, 0.3f, 0.35f) : (Color?)new Color(0.55f, 0.55f, 0.6f);
 
-        public string Describe(GunHit hit) => Target(hit) is GameObject go ? go.name : "only spawned objects";
+        public override string Describe(GunHit hit) => Target(hit) is GameObject go ? go.name : "only spawned objects";
 
-        public string Fire(GunHit hit)
+        public override string Fire(GunHit hit)
         {
             var target = Target(hit);
             if (target == null) return hit.HasHit ? "That wasn't spawned by the menu." : "Nothing there.";
@@ -68,13 +70,13 @@ namespace BundleMenu
     }
 
     /// <summary>Inspect: says what you're pointing at (object path, layer, distance).</summary>
-    public sealed class InspectMode : IGunMode
+    public sealed class InspectMode : GunMode
     {
-        public string Name => "Inspect";
-        public Color? Tint(GunHit hit) => null;
-        public string Describe(GunHit hit) => hit.Collider != null ? hit.Collider.name : "-";
+        public override string Name => "Inspect";
+        public override string Hint => "Tells you the name, layer and distance of whatever you shoot.";
+        public override string Describe(GunHit hit) => hit.Collider != null ? hit.Collider.name : "-";
 
-        public string Fire(GunHit hit)
+        public override string Fire(GunHit hit)
         {
             if (hit.Collider == null) return "Nothing there.";
             var t = hit.Collider.transform;
@@ -85,17 +87,18 @@ namespace BundleMenu
     }
 
     /// <summary>Measure: first shot sets point A, second shot reports the distance to point B.</summary>
-    public sealed class MeasureMode : IGunMode
+    public sealed class MeasureMode : GunMode
     {
         private Vector3? start;
 
-        public string Name => "Measure";
-        public Color? Tint(GunHit hit) => start != null ? new Color(1f, 0.8f, 0.3f) : (Color?)null;
+        public override string Name => "Measure";
+        public override string Hint => "Shoot two points and it tells you how far apart they are.";
+        public override Color? Tint(GunHit hit) => start != null ? new Color(1f, 0.8f, 0.3f) : (Color?)null;
 
-        public string Describe(GunHit hit) =>
+        public override string Describe(GunHit hit) =>
             start != null && hit.HasHit ? $"{Vector3.Distance(start.Value, hit.Point):0.00} m" : $"{hit.Distance:0.0} m away";
 
-        public string Fire(GunHit hit)
+        public override string Fire(GunHit hit)
         {
             if (!hit.HasHit) return "Point at a surface.";
             if (start == null)
@@ -107,37 +110,7 @@ namespace BundleMenu
             start = null;
             return $"Distance: {d:0.00} m";
         }
-    }
 
-    /// <summary>
-    /// Grapple: fire at a surface and you're yanked toward it, arcing slightly upward so you clear ledges.
-    /// Moves only you, and only where mods are allowed (offline, private or modded rooms).
-    /// </summary>
-    public sealed class GrappleMode : IGunMode
-    {
-        private readonly ModContext ctx;
-        public GrappleMode(ModContext ctx) => this.ctx = ctx;
-
-        public string Name => "Grapple";
-
-        public Color? Tint(GunHit hit) =>
-            !Allowed ? new Color(0.55f, 0.55f, 0.6f) : hit.HasHit ? (Color?)null : new Color(0.55f, 0.55f, 0.6f);
-
-        public string Describe(GunHit hit) => !Allowed ? "paused (public lobby)" : hit.HasHit ? $"{hit.Distance:0.0} m" : "no anchor";
-
-        private bool Allowed => ctx.Allowed == null || ctx.Allowed();
-
-        public string Fire(GunHit hit)
-        {
-            if (!Allowed) return "Grapple is off in public lobbies.";
-            if (!hit.HasHit) return "Nothing to grab onto.";
-            var rb = ctx.Player?.Body;
-            if (rb == null) return "Your player isn't loaded yet.";
-
-            var to = hit.Point - rb.position;
-            float speed = Mathf.Clamp(to.magnitude * 2.2f, 8f, 32f);
-            rb.velocity = to.normalized * speed + Vector3.up * Mathf.Min(6f, to.magnitude * 0.25f);
-            return $"Grapple  {to.magnitude:0.0} m";
-        }
+        public override void OnDeselected() => start = null;
     }
 }

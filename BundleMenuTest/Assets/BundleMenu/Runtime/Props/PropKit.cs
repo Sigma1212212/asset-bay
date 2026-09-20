@@ -53,12 +53,30 @@ namespace BundleMenu
             return go.transform;
         }
 
-        /// <summary>Removes something now in the editor, and the normal way while the game is running.</summary>
-        private static void Kill(Object thing)
-        {
-            if (Application.isPlaying) Object.Destroy(thing);
-            else Object.DestroyImmediate(thing);
-        }
+        /// <summary>A surface with almost no grip, for ice.</summary>
+#if UNITY_6000_0_OR_NEWER
+        public static PhysicsMaterial Slippery() =>
+            new PhysicsMaterial("ice (menu)")
+            {
+                dynamicFriction = 0.02f,
+                staticFriction = 0.02f,
+                frictionCombine = PhysicsMaterialCombine.Minimum,
+            };
+#else
+        public static PhysicMaterial Slippery() =>
+            new PhysicMaterial("ice (menu)")
+            {
+                dynamicFriction = 0.02f,
+                staticFriction = 0.02f,
+                frictionCombine = PhysicMaterialCombine.Minimum,
+            };
+#endif
+
+        /// <summary>
+        /// Takes a component off now rather than at the end of the frame. Props are built and used in the
+        /// same breath, so a collider that lingers for a frame is a collider in the wrong shape.
+        /// </summary>
+        private static void Kill(Object thing) => Object.DestroyImmediate(thing);
 
         /// <summary>Gives an object its own material in the given colour (bright colours glow a little).</summary>
         public static Material Paint(GameObject go, Color color, float glow = 0f)

@@ -21,6 +21,8 @@ namespace BundleMenu
         public int WalkableLayer;                              // the layer Gorilla Tag lets you stand on
         public Func<bool> Allowed;                             // the mods' lobby rule
         public Func<Vector3, bool> Teleport;                   // moves you, the game's own way
+        public Action SaveCheckpoint;                          // the checkpoint flag uses this
+        public Action<Vector3> Surprise;                       // the chest asks for a random prop here
     }
 
     /// <summary>
@@ -39,8 +41,11 @@ namespace BundleMenu
                 if (all != null) return all;
                 all = new List<PropDef>();
                 AddPlayground();
+                AddMorePlayground();
                 AddScenery();
+                AddMoreScenery();
                 AddToys();
+                AddMoreToys();
                 return all;
             }
         }

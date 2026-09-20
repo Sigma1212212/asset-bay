@@ -43,7 +43,12 @@ namespace BundleMenu.Editor
                 if (go == null) { Debug.LogWarning("PROPPREVIEW: " + def.Name + " built nothing"); continue; }
                 go.transform.position = new Vector3((i - (count - 1) * 0.5f) * spacing, 0f, 0f);
                 go.transform.rotation = Quaternion.Euler(0f, 205f, 0f);
-                Shoot(cam, go.transform.position + new Vector3(0f, 1.2f, 0f), 3.4f,
+
+                // Frame each prop by its own size, so tall ones aren't cut off.
+                var renderers = go.GetComponentsInChildren<Renderer>();
+                var bounds = renderers.Length > 0 ? renderers[0].bounds : new Bounds(go.transform.position, Vector3.one);
+                for (int r = 1; r < renderers.Length; r++) bounds.Encapsulate(renderers[r].bounds);
+                Shoot(cam, bounds.center, Mathf.Max(2.5f, bounds.size.magnitude * 1.1f),
                     $"{TabletPreview.OutputFolder}/prop_{def.Name.Replace(' ', '_')}.png", 420, 420);
             }
 
@@ -57,7 +62,7 @@ namespace BundleMenu.Editor
 
         private static void Shoot(Camera cam, Vector3 target, float distance, string path, int width, int height)
         {
-            cam.transform.position = target + new Vector3(0f, 0.9f, -distance);
+            cam.transform.position = target + new Vector3(distance * 0.25f, distance * 0.28f, -distance);
             cam.transform.LookAt(target);
 
             var rt = new RenderTexture(width, height, 24) { antiAliasing = 8 };

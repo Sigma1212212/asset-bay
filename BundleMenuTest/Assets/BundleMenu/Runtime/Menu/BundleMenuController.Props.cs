@@ -15,7 +15,36 @@ namespace BundleMenu
             WalkableLayer = Mods != null && Mods.Context.Player != null ? Mods.Context.Player.WalkableLayer : -1,
             Allowed = () => Mods == null || Mods.Allowed,
             Teleport = Blink,
+            SaveCheckpoint = SaveCheckpointHere,
+            Surprise = SpawnSomethingRandom,
         };
+
+        private void SaveCheckpointHere()
+        {
+            if (Mods == null) return;
+            Toast(Checkpoint.Save(Mods.Context), ToastKind.Success);
+            dirty = true;
+        }
+
+        /// <summary>What the surprise chest drops: any prop but another chest.</summary>
+        private void SpawnSomethingRandom(Vector3 where)
+        {
+            var props = PropLibrary.All;
+            if (props.Count == 0) return;
+            PropDef pick = null;
+            for (int tries = 0; tries < 8 && pick == null; tries++)
+            {
+                var candidate = props[UnityEngine.Random.Range(0, props.Count)];
+                if (candidate.Name == "Surprise chest") continue;
+                if (candidate.NeedsMods && Mods != null && !Mods.Allowed) continue;
+                pick = candidate;
+            }
+            if (pick == null) return;
+            var spot = where + Vector3.up * 0.4f;
+            PropLibrary.Spawn(pick, PropBuildInfo(), Spawner, spot, Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 0f));
+            Toast("The chest had a " + pick.Name.ToLowerInvariant() + " in it", ToastKind.Success);
+            dirty = true;
+        }
 
         /// <summary>Moves you, the way Gorilla Tag expects. False means it couldn't.</summary>
         private bool Blink(Vector3 to)
@@ -24,6 +53,32 @@ namespace BundleMenu
             if (player == null || Mods == null || !Mods.Allowed) return false;
             var facing = Quaternion.Euler(0f, Rig?.Camera != null ? Rig.Camera.transform.eulerAngles.y : 0f, 0f);
             return player.TeleportTo(to, facing);
+        }
+
+        /// <summary>The prop self-test, made the first time it's asked for.</summary>
+        public PropSelfTest PropTest { get; private set; }
+
+        /// <summary>
+        /// Checks every prop where you're standing - well above the map, so nothing of the game is
+        /// touched and nobody else sees a thing.
+        /// </summary>
+        public void TestProps()
+        {
+            if (PropTest == null)
+            {
+                PropTest = gameObject.AddComponent<PropSelfTest>();
+                PropTest.Build = PropBuildInfo;
+                PropTest.Where = () => (Rig?.Camera != null ? Rig.Camera.transform.position : Vector3.zero) + Vector3.up * 400f;
+                PropTest.Progress = _ => dirty = true;
+                PropTest.Finished = () =>
+                {
+                    Toast(PropTest.Summary, PropTest.Failed > 0 ? ToastKind.Error : ToastKind.Success);
+                    dirty = true;
+                };
+            }
+            if (PropTest.Running) return;
+            Toast("Checking every prop...", ToastKind.Info);
+            PropTest.Run();
         }
 
         /// <summary>Puts a prop on the ground a couple of steps in front of you.</summary>

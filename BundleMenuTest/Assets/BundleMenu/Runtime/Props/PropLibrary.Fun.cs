@@ -55,7 +55,7 @@ namespace BundleMenu
                 PropKit.Shape(root.transform, PrimitiveType.Cylinder, "Chain", new Vector3(0f, 2.4f, 0f),
                     new Vector3(0.03f, 0.6f, 0.03f), PropKit.Dark(b.Theme), collide: false);
                 var ball = PropKit.Shape(root.transform, PrimitiveType.Sphere, "Ball", new Vector3(0f, 1.6f, 0f),
-                    new Vector3(0.7f, 0.7f, 0.7f), new Color(0.75f, 0.78f, 0.85f), collide: false);
+                    new Vector3(0.7f, 0.7f, 0.7f), new Color(0.75f, 0.78f, 0.85f));
                 // Facets: little tiles all over the ball, in the theme's two colours.
                 for (int i = 0; i < 26; i++)
                 {

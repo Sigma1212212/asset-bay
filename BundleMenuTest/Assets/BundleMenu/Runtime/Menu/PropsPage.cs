@@ -55,6 +55,13 @@ namespace BundleMenu
             }
 
             rows.Add(RowSpec.Message("how", "Click to spawn one in front of you. Right-click to load it into the gun instead."));
+            rows.Add(new RowSpec
+            {
+                Key = "check", Label = "Check every prop works",
+                Value = ctx.PropTest != null ? ctx.PropTest.Summary : "",
+                ShowChevron = true,
+                OnClick = () => ctx.Navigate(new PropTestPage()),
+            });
             if (ctx.Spawner.Count > 0)
                 rows.Add(new RowSpec
                 {

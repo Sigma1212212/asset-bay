@@ -34,3 +34,6 @@ backend/test-seed/
 
 # Built bundles (published to R2, not git)
 build/
+proptest.txt
+propdebug.txt
+*.log

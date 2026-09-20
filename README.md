@@ -7,7 +7,8 @@ An in-game menu for listing, loading, unloading and spawning Unity **AssetBundle
 - Desktop GUI: a dedicated window with a flat 2D menu and a live, tilted 3D preview of the real menu (both clickable)
 - mods with the same controls on a keyboard as in VR, all re-bindable (Mods > Controls)
 - a gun lib with twelve modes, a gun you can see in your hand, and charge-up shots
-- fourteen props built into the menu - trampolines, portals, a campfire, a Spotify boombox
+- twenty-nine props built into the menu - trampolines, portals, a campfire, a Spotify boombox
+- a one-button check that every prop still behaves, run in game or from the Unity project
 - a gun lib, and signed releases (see `signing/`)
 - a dummy mode, so you can test with no real bundles
 
@@ -57,10 +58,25 @@ player follow the same lobby rule as the mods - offline, private or modded rooms
 | Impulse | Charged shove - or launch yourself off the ground |
 
 **Props** (`Props/`) are built from Unity primitives in your theme's colours, so they need no downloads
-and always match: trampoline, launch pad, boost ring, climbing pole, long ramp, portal pads, campfire,
-lamp post, disco ball, monke statue, beach ball, balloon, can stack, and a boombox that shows your
-Spotify cover art and thumps along with it. Spawn them from **Props**, or load one into the gun. Like
-everything else the menu spawns, they exist on your machine only.
+and always match. Spawn them from **Props**, or load one into the gun. Like everything else the menu
+spawns, they exist on your machine only.
+
+| Group | Props |
+|---|---|
+| Playground | trampoline, launch pad, boost ring, climbing pole, long ramp, portal pads, moving platform, fan, conveyor strip, ice patch, cannon, scaffold tower, checkpoint flag |
+| Scenery | campfire, lamp post, disco ball, monke statue, tree, arcade sign, picnic bench |
+| Toys | beach ball, balloon, can stack, boombox (your Spotify), basketball hoop, bowling set, punching bag, firework, surprise chest |
+
+**Checking them.** `PropSelfTest` builds every prop 400 m above your head, drops a test object on it,
+pushes it through triggers and watches what happens, then clears it all away: trampolines must bounce,
+fans must lift, belts must carry, portals must send the probe through, cans must score. Run it in game
+from **Props > Check every prop works** (or the H window), or from the Unity project:
+
+```
+Unity.exe -batchmode -projectPath BundleMenuTest -executeMethod BundleMenu.Editor.PropPlayTest.Run
+```
+
+which enters play mode, runs the same checks with real physics and writes `proptest.txt`.
 
 ---
 

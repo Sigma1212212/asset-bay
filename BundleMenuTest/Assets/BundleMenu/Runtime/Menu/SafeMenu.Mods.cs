@@ -76,7 +76,12 @@ namespace BundleMenu
                 GUILayout.EndHorizontal();
             }
             GUILayout.EndScrollView();
-            if (Button($"clear what I spawned ({Menu.Spawner.Count})")) Menu.ClearSpawned();
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button($"clear what I spawned ({Menu.Spawner.Count})", sButton, GUILayout.Width(220))) Menu.ClearSpawned();
+            var test = Menu.PropTest;
+            if (GUILayout.Button(test != null && test.Running ? "checking..." : "check every prop", sButton, GUILayout.Width(170))) Menu.TestProps();
+            GUILayout.EndHorizontal();
+            if (test != null) GUILayout.Label(test.Running ? test.Step : test.Summary, sDim);
             EndSection();
         }
     }

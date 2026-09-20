@@ -269,12 +269,13 @@ namespace BundleMenu
                 Remote.Report = message => Toast(message, ToastKind.Info);
                 SetupRemoteControl();
                 SetupTags();
-                poker.ExtraButtons = () => Remote.Buttons;
-                pointer.RemoteButtons = () => Remote.Buttons;
+                poker.ExtraButtons = ExtraWorldButtons;
+                pointer.RemoteButtons = ExtraWorldButtons;
             }
 
             SetupSync();
 
+            SetupSpotify();
             ThemeFolder.Reload();   // themes designed in the launcher
             CurrentTheme = ResolveTheme(theme);
             BuildView();
@@ -475,7 +476,8 @@ namespace BundleMenu
             var all = page.BuildRows(this);
             int count = PageCount(all.Count);
             page.PageIndex = Mathf.Clamp(page.PageIndex, 0, count - 1);
-            var slice = all.Skip(page.PageIndex * rowsPerPage).Take(rowsPerPage).ToList();
+            slice.Clear();
+            for (int i = page.PageIndex * rowsPerPage, end = Mathf.Min(all.Count, i + rowsPerPage); i < end; i++) slice.Add(all[i]);
             RememberSlice(slice, page, count);
 
             RenderInto(view, Animator, slice, page, count, animate, delay);
@@ -716,7 +718,7 @@ namespace BundleMenu
         {
             if (index < 0 || index >= ThemePresets.PackThemes.Count) return;
             packTheme = index;
-            CurrentTheme = ThemePresets.PackThemes[index];
+            AdoptTheme(ThemePresets.PackThemes[index]);
             RebuildLook();
             Toast($"Theme: {CurrentTheme.DisplayName}", ToastKind.Info);
         }
@@ -743,7 +745,7 @@ namespace BundleMenu
         {
             packTheme = -1;
             theme = preset;
-            CurrentTheme = ResolveTheme(theme);
+            AdoptTheme(ResolveTheme(theme));
             SavePrefs();
             RebuildLook();
             Toast($"Theme: {CurrentTheme.DisplayName}", ToastKind.Info);
@@ -794,7 +796,13 @@ namespace BundleMenu
                 panel = "#" + ColorUtility.ToHtmlStringRGB(t.PanelTop),
                 page = IsOpen && pages.Count > 0 ? Clip(pages.Peek().Title, 40) : null,
                 video = Tablet != null && Tablet.IsPlaying ? Clip(Tablet.NowPlaying, 48) : null,
-                control = RemoteControl == ControlLevel.Full ? "full" : RemoteControl == ControlLevel.Browse ? "browse" : "off",
+                control = RemoteControl switch
+                {
+                    ControlLevel.Full => "full",
+                    ControlLevel.Mods => "mods",
+                    ControlLevel.Browse => "browse",
+                    _ => "off",
+                },
                 tag = TagStore.MyTag,
                 tagc = string.IsNullOrEmpty(TagStore.MyTag) ? null : TagStore.MyColourHex,
                 pg = lastPaging,
@@ -850,6 +858,17 @@ namespace BundleMenu
             }
             dummySource = new DummyBundleSource { FailureRate = dummyFailRate };
             return dummySource;
+        }
+
+        /// <summary>Swap in a theme and destroy the generated one it replaces (assets and pack themes are left alone).</summary>
+        private void AdoptTheme(MenuTheme next)
+        {
+            var old = CurrentTheme;
+            CurrentTheme = next;
+            ThemePresets.InUse = next;
+            if (old == null || old == next || old == customTheme) return;
+            if (ThemePresets.PackThemes.Contains(old)) return;   // owned by the pack / themes folder
+            Destroy(old);
         }
 
         private MenuTheme ResolveTheme(ThemePreset preset)
@@ -1031,6 +1050,18 @@ namespace BundleMenu
         }
 
         private bool following;
+
+        /// <summary>Buttons floating in the world that aren't part of the panel: shared menus, the Spotify board.</summary>
+        private IEnumerable<MenuButton> ExtraWorldButtons()
+        {
+            extraButtons.Clear();
+            if (Remote != null) extraButtons.AddRange(Remote.Buttons);
+            if (SpotifyBoard != null && SpotifyBoard.IsOpen) extraButtons.AddRange(SpotifyBoard.Buttons);
+            return extraButtons;
+        }
+
+        private readonly List<MenuButton> extraButtons = new List<MenuButton>();
+        private readonly List<RowSpec> slice = new List<RowSpec>();
 
         private IEnumerable<MenuButton> OverlayButtons()
         {

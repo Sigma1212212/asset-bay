@@ -105,6 +105,9 @@ namespace BundleMenu
     /// <summary>The four built-in looks. Original designs; none are copies of existing menus.</summary>
     public static class ThemePresets
     {
+        /// <summary>The theme the menu is wearing right now, so a reload never destroys it under itself.</summary>
+        public static MenuTheme InUse;
+
         /// <summary>Themes added by the content bundle (theme-*.json), shown after the built-in ones.</summary>
         public static readonly System.Collections.Generic.List<MenuTheme> PackThemes = new System.Collections.Generic.List<MenuTheme>();
 

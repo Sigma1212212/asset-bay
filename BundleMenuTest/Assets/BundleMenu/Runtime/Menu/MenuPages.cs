@@ -115,6 +115,18 @@ namespace BundleMenu
                 });
             }
 
+            rows.Add(new RowSpec
+            {
+                Key = "spotify", Label = "Spotify",
+                Value = !SpotifyAuth.SignedIn ? "sign in" : ctx.Spotify.State.Playing ? ctx.Spotify.State.Track : "paused",
+                Light = !SpotifyAuth.SignedIn ? StatusLight.Idle : ctx.Spotify.State.Playing ? StatusLight.Ok : StatusLight.Idle,
+                ShowChevron = true, OnClick = () => ctx.Navigate(new SpotifyPage()),
+            });
+            rows.Add(new RowSpec
+            {
+                Key = "spawn", Label = "Spawn", Value = ctx.Spawner.Count > 0 ? ctx.Spawner.Count + " out" : "",
+                ShowChevron = true, OnClick = () => ctx.Navigate(new SpawnPage()),
+            });
             if (ctx.Presence != null)
                 rows.Add(new RowSpec
                 {
@@ -291,6 +303,11 @@ namespace BundleMenu
 
             rows.Add(new RowSpec
             {
+                Key = "mine", Label = "My videos", Value = "from this PC", ShowChevron = true,
+                OnClick = () => ctx.Navigate(new MyVideosPage()),
+            });
+            rows.Add(new RowSpec
+            {
                 Key = "test", Label = "Test the tablet", Value = "timer + beeps",
                 OnClick = () => SafeMenu.PlayTestVideo(ctx),
             });
@@ -425,6 +442,17 @@ namespace BundleMenu
                     SecondaryIcon = Icon.Dot,
                 });
             }
+            if (ctx.SelfTest != null)
+                rows.Add(new RowSpec
+                {
+                    Key = "nettest", Label = "Test the networking",
+                    Value = ctx.SelfTest.Running ? "testing..." : ctx.SelfTest.Summary,
+                    Light = ctx.SelfTest.Running ? StatusLight.Busy
+                        : ctx.SelfTest.Summary.StartsWith("all good") ? StatusLight.Ok
+                        : ctx.SelfTest.Summary.Contains("failed") ? StatusLight.Error : StatusLight.None,
+                    Interactable = !ctx.SelfTest.Running,
+                    OnClick = () => { ctx.SelfTest.Run(); ctx.RefreshNow(); },
+                });
             if (ctx.IsAdmin && ctx.Solo != null)
             {
                 rows.Add(new RowSpec

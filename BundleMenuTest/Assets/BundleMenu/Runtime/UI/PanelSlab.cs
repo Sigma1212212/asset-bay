@@ -19,6 +19,14 @@ namespace BundleMenu
 
         private static Material template;
 
+        /// <summary>Drop the material every slab copies from (called when the menu is ejected).</summary>
+        public static void ReleaseShared()
+        {
+            if (template == null) return;
+            if (Application.isPlaying) Destroy(template); else DestroyImmediate(template);
+            template = null;
+        }
+
         public static PanelSlab Add(RectTransform body, Color color, float cornerRadius, float thickness)
         {
             var go = new GameObject("Slab", typeof(RectTransform));

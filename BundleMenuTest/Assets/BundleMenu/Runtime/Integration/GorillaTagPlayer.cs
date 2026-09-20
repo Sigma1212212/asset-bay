@@ -135,9 +135,13 @@ namespace BundleMenu
         }
 
         /// <summary>Everyone in the room except you. Cheap enough to call a few times a second, not every frame.</summary>
+        private readonly List<OtherPlayer> roster = new List<OtherPlayer>();
+
+        /// <summary>Everyone in the room except you. The list is reused, so copy it if you keep it.</summary>
         public List<OtherPlayer> OtherPlayers()
         {
-            var result = new List<OtherPlayer>();
+            var result = roster;
+            result.Clear();
             if (rigType == null) return result;
             UnityEngine.Object[] rigs;
             try { rigs = UnityEngine.Object.FindObjectsByType(rigType, FindObjectsSortMode.None); }

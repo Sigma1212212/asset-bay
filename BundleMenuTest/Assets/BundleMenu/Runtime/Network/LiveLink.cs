@@ -17,6 +17,8 @@ namespace BundleMenu
     public sealed class LiveLink : IDisposable
     {
         public readonly ConcurrentQueue<string> Inbox = new ConcurrentQueue<string>();
+        /// <summary>Messages already taken off the queue (the self-test looks back through these).</summary>
+        public readonly System.Collections.Generic.List<string> Seen = new System.Collections.Generic.List<string>();
         public bool Connected => connected && !disposed;
         public bool Dead { get; private set; }
         public string Error { get; private set; }

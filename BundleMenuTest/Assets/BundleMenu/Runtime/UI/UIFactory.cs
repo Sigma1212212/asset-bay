@@ -79,6 +79,9 @@ namespace BundleMenu
 
         private static TMP_FontAsset cachedFont;
 
+        /// <summary>Forget the font we borrowed from the game (called when the menu is ejected).</summary>
+        public static void ForgetFont() => cachedFont = null;
+
         /// <summary>
         /// TMP's default font, or - when running injected into a game that has no TMP Settings asset -
         /// any font asset that happens to be loaded.

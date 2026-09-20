@@ -135,7 +135,7 @@ namespace BundleMenu
         {
             Color accent = Parse(state.accent, new Color(0.23f, 0.91f, 1f));
             Color panel = Parse(state.panel, new Color(0.06f, 0.07f, 0.13f));
-            bool controllable = state.control == "browse" || state.control == "full";
+            bool controllable = Controllable(state.control);
             // With control on, the card also appears while their menu is closed (so you can open it for them).
             bool show = state.open || controllable;
 
@@ -156,7 +156,7 @@ namespace BundleMenu
             card.Rim.color = accent;
             card.Title.text = !state.open ? $"{player.Name}'s menu" : string.IsNullOrEmpty(state.page) ? state.theme ?? "Menu" : state.page;
             card.Detail.text = controllable
-                ? $"{player.Name} lets you {(state.control == "full" ? "use everything" : "browse")}" + (string.IsNullOrEmpty(state.pg) ? "" : $" · page {state.pg}")
+                ? $"{player.Name} lets you {(state.control == "full" ? "use everything" : state.control == "mods" ? "browse + use their mods" : "browse")}" + (string.IsNullOrEmpty(state.pg) ? "" : $" · page {state.pg}")
                 : string.IsNullOrEmpty(state.video) ? $"{player.Name} · {state.theme}" + (string.IsNullOrEmpty(state.style) ? "" : $" / {state.style}")
                 : $"Playing: {state.video}";
 
@@ -183,7 +183,7 @@ namespace BundleMenu
             for (int i = card.Mirror.childCount - 1; i >= 0; i--) Destroy(card.Mirror.GetChild(i).gameObject);
             card.Buttons.Clear();
 
-            bool controllable = state.control == "browse" || state.control == "full";
+            bool controllable = Controllable(state.control);
             int rowCount = controllable && state.open && state.rows != null ? state.rows.Length : 0;
             float mirrorH = !controllable ? 0f : !state.open ? 44f : rowCount * (RowH + Gap) + 40f;
             card.Panel.sizeDelta = new Vector2(W, 82f + mirrorH + Pad);
@@ -249,6 +249,9 @@ namespace BundleMenu
             t.Text = light ? new Color(0.1f, 0.1f, 0.12f) : Color.white;
             return t;
         }
+
+        private static bool Controllable(string control) =>
+            control == "browse" || control == "mods" || control == "full";
 
         private static Color Parse(string hex, Color fallback) =>
             !string.IsNullOrEmpty(hex) && ColorUtility.TryParseHtmlString(hex, out var c) ? c : fallback;

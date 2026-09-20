@@ -47,7 +47,13 @@ namespace BundleMenu
             }
 
             // Replace the previous folder themes, keeping any that came from the content pack.
-            ThemePresets.PackThemes.RemoveAll(t => FromFolder.Contains(t.DisplayName));
+            foreach (var old in ThemePresets.PackThemes)
+                if (old != null && old != ThemePresets.InUse && FromFolder.Contains(old.DisplayName))
+                {
+                    if (Application.isPlaying) UnityEngine.Object.Destroy(old);
+                    else UnityEngine.Object.DestroyImmediate(old);
+                }
+            ThemePresets.PackThemes.RemoveAll(t => t == null || FromFolder.Contains(t.DisplayName));
             FromFolder.Clear();
             foreach (var t in loaded)
             {

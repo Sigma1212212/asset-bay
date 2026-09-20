@@ -99,6 +99,24 @@ namespace BundleMenu
 
         public NameTags Tags { get; private set; }
         public SoloTest Solo { get; private set; }
+        public NetworkTest SelfTest { get; private set; }
+        public SpotifyClient Spotify { get; private set; }
+        public SpotifyBoard SpotifyBoard { get; private set; }
+
+        private void SetupSpotify()
+        {
+            SpotifyAuth.Reload(force: true);
+            Spotify = gameObject.AddComponent<SpotifyClient>();
+            // Ask often while something is showing it, rarely otherwise (Spotify rate-limits).
+            Spotify.Interval = () => SpotifyBoard != null && SpotifyBoard.IsOpen ? 3f : IsOpen ? 8f : 30f;
+            Spotify.Changed += () => dirty = true;
+
+            SpotifyBoard = gameObject.AddComponent<SpotifyBoard>();
+            SpotifyBoard.Client = Spotify;
+            SpotifyBoard.ViewCamera = () => Rig.Camera;
+            SpotifyBoard.Theme = () => CurrentTheme;
+            SpotifyBoard.Report = message => Toast(message, ToastKind.Info);
+        }
 
         private void SetupTags()
         {
@@ -112,6 +130,10 @@ namespace BundleMenu
             Solo.Menu = this;
             Solo.Presence = Presence;
             Solo.ViewCamera = () => Rig.Camera;
+
+            SelfTest = gameObject.AddComponent<NetworkTest>();
+            SelfTest.Menu = this;
+            SelfTest.Presence = Presence;
         }
 
         /// <summary>Start / stop the solo test (a pretend second player in your room).</summary>

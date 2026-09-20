@@ -95,6 +95,18 @@ namespace BundleMenu
             }
             EndSection();
 
+            Section("is the networking working?");
+            var test = Menu.SelfTest;
+            if (test != null)
+            {
+                GUI.enabled = !test.Running;
+                if (Button(test.Running ? "testing..." : "run the network test")) test.Run();
+                GUI.enabled = true;
+                Value("result", test.Summary);
+                foreach (var line in test.Results) GUILayout.Label(line, line.StartsWith("ok") ? sValue : sError);
+            }
+            EndSection();
+
             Section("solo test (no friend needed)");
             var solo = Menu.Solo;
             if (solo == null) GUILayout.Label("Gorilla Tag only.", sDim);

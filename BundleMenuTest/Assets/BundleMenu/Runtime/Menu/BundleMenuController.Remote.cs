@@ -9,7 +9,8 @@ namespace BundleMenu
     {
         Off,     // look but don't touch (default)
         Browse,  // open/close, move between pages, videos on your tablet, theme and menu type
-        Full,    // anything you could press yourself, including mods and bundles
+        Mods,    // browse, plus turning your mods on and off
+        Full,    // anything you could press yourself, including bundles and tools
     }
 
     /// <summary>
@@ -33,6 +34,7 @@ namespace BundleMenu
         public string RemoteControlName => RemoteControl switch
         {
             ControlLevel.Browse => "browse",
+            ControlLevel.Mods => "browse + my mods",
             ControlLevel.Full => "full control",
             _ => "off",
         };
@@ -50,6 +52,7 @@ namespace BundleMenu
             Toast(level switch
             {
                 ControlLevel.Browse => "Others here can browse your menu and use your tablet. Resets when the game restarts.",
+                ControlLevel.Mods => "Others here can browse your menu and switch your mods on and off. Resets when the game restarts.",
                 ControlLevel.Full => "Others here can press ANYTHING on your menu, mods included. Resets when the game restarts.",
                 _ => "Nobody else can use your menu.",
             }, level == ControlLevel.Full ? ToastKind.Error : ToastKind.Info);
@@ -95,6 +98,8 @@ namespace BundleMenu
             if (RemoteControl == ControlLevel.Full) return true;
             if (RemoteControl == ControlLevel.Off) return false;
             var page = pages.Peek();
+            // Mods level adds every row of the Mods page (each mod and its settings) to what Browse allows.
+            if (RemoteControl == ControlLevel.Mods && page is ModsPage) return true;
             return r.ShowChevron || page is VideosPage || BrowseKeys.Contains(r.Key) || r.Key.StartsWith("v:", StringComparison.Ordinal);
         }
 

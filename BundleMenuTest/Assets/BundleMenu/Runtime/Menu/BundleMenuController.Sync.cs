@@ -81,7 +81,7 @@ namespace BundleMenu
                 if (source != sourceMode) SetSource(source);
 
                 packTheme = -1;
-                CurrentTheme = ResolveTheme(theme);
+                AdoptTheme(ResolveTheme(theme));
                 SavePrefs();
                 PlayerPrefs.SetString(Prefs + "savedat", savedAt.ToString());
                 RebuildLook();

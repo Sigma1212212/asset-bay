@@ -34,6 +34,8 @@ namespace BundleMenu
         /// <summary>Destroys every generated sprite and texture (called on eject; they're rebuilt on demand).</summary>
         public static void ReleaseAll()
         {
+            PanelSlab.ReleaseShared();
+            UIFactory.ForgetFont();
             foreach (var s in Cache.Values)
             {
                 if (s == null) continue;
